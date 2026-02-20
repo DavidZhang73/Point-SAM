@@ -38,23 +38,32 @@
 ## Installation
 1. Install the required environment
 ```
-conda create -n PartSAM python=3.11 -y
-conda activate PartSAM
-# PyTorch 2.4.1 with CUDA 12.4
-pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu124
-pip install lightning==2.2 h5py yacs trimesh scikit-image loguru boto3
-pip install mesh2sdf tetgen pymeshlab plyfile einops libigl polyscope potpourri3d simple_parsing arrgh open3d safetensors
-pip install hydra-core omegaconf accelerate timm igraph ninja
-pip install torch-scatter -f https://data.pyg.org/whl/torch-2.4.1+cu124.html
-apt install libx11-6 libgl1 libxrender1
-pip install vtk
+conda create -n cuda124 -y -c conda-forge cuda-toolkit=12.4 cuda-nvcc=12.4
+conda activate cuda124
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+export APEX_CPP_EXT=1
+export APEX_CUDA_EXT=1
+uv sync
+
+# conda create -n PartSAM python=3.11 -y
+# conda activate PartSAM
+# # PyTorch 2.4.1 with CUDA 12.4
+# pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+# pip install lightning==2.2 h5py yacs trimesh scikit-image loguru boto3
+# pip install mesh2sdf tetgen pymeshlab plyfile einops libigl polyscope potpourri3d simple_parsing arrgh open3d safetensors
+# pip install hydra-core omegaconf accelerate timm igraph ninja
+# pip install torch-scatter -f https://data.pyg.org/whl/torch-2.4.1+cu124.html
+# apt install libx11-6 libgl1 libxrender1
+# pip install vtk
 ```
 
-2. Install other third-party modules (torkit3d and apex) following [Point-SAM](https://github.com/zyc00/Point-SAM)
+2. ~~Install other third-party modules (torkit3d and apex) following [Point-SAM](https://github.com/zyc00/Point-SAM)~~
 
 3. Install the pretrained model weight
 ```
-pip install -U "huggingface_hub[cli]"
+# pip install -U "huggingface_hub[cli]"
 huggingface-cli login
 huggingface-cli download Czvvd/PartSAM --local-dir ./pretrained
 ```
@@ -86,7 +95,7 @@ We thank the authors for their great work！
 
 ```bibtex
 @article{zhu2025partsam,
-  title={PartSAM: A Scalable Promptable Part Segmentation Model Trained on Native 3D Data}, 
+  title={PartSAM: A Scalable Promptable Part Segmentation Model Trained on Native 3D Data},
   author={Zhe Zhu and Le Wan and Rui Xu and Yiheng Zhang and Honghua Chen and Zhiyang Dou and Cheng Lin and Yuan Liu and Mingqiang Wei},
   journal={arXiv preprint arXiv:2509.21965},
   year={2025}

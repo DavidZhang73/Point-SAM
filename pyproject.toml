@@ -1,0 +1,78 @@
+[project]
+name = "partsam"
+version = "0.1.0"
+description = "PartSAM"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch==2.4.1",
+    "torchvision==0.19.1",
+    "torchaudio==2.4.1",
+    "lightning==2.2",
+    "h5py",
+    "yacs",
+    "trimesh",
+    "scikit-image",
+    "loguru",
+    "boto3",
+    "mesh2sdf",
+    "tetgen",
+    "pymeshlab",
+    "plyfile",
+    "einops",
+    "libigl",
+    "polyscope",
+    "potpourri3d",
+    "open3d",
+    "vtk",
+    "hydra-core",
+    "omegaconf",
+    "simple_parsing",
+    "arrgh",
+    "accelerate",
+    "timm",
+    "safetensors",
+    "ninja",
+    "igraph",
+    "huggingface_hub",
+    "pointops @ git+https://github.com/Pointcept/Pointcept.git#subdirectory=libs/pointops",
+    "torkit3d @ git+https://github.com/Jiayuan-Gu/torkit3d.git",
+    "apex @ git+https://github.com/NVIDIA/apex.git",
+    "torch-scatter>=2.1.2",
+]
+
+
+[dependency-groups]
+dev = ["ruff>=0.15.0"]
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu124"]
+find-links = ["https://data.pyg.org/whl/torch-2.4.1+cu124.html"]
+
+[tool.uv.extra-build-dependencies]
+pointops = ["torch==2.4.1"]
+torkit3d = ["torch==2.4.1"]
+apex = ["torch==2.4.1", "numpy"]
+torch-scatter = ["torch==2.4.1"]
+
+# https://docs.astral.sh/ruff/configuration/
+[tool.ruff]
+line-length = 120
+lint.select = [
+    "F",  # pyflakes
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "UP", # pyupgrade
+]
+lint.ignore = ["F401", "F722", "F821"]
+
+[tool.pyright]
+exclude = [
+    '**/node_modules',
+    '**/__pycache__',
+    '**/.*',
+    '.venv',
+    'data',
+    'logs',
+]
+typeCheckingMode = "off"
