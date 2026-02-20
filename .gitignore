@@ -6,6 +6,8 @@
 /logs
 /data
 /pretrained
+/results/*
+!/results/.gitkeep
 
 ### VisualStudioCode template
 .vscode/*
