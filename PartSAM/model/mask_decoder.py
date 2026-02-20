@@ -1,13 +1,11 @@
 # https://github.com/facebookresearch/segment-anything/blob/6fdee8f2727f4506cfbbe553e23b895e27956588/segment_anything/modeling/mask_decoder.py
 import dataclasses
-from typing import Dict, List, Tuple, Type
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from .common import compute_interp_weights, interpolate_features, repeat_interleave
-
 
 
 @dataclasses.dataclass
@@ -18,6 +16,7 @@ class AuxInputs:
     centers: torch.Tensor
     interp_index: torch.Tensor = None
     interp_weight: torch.Tensor = None
+
 
 @dataclasses.dataclass
 class AuxInputs_ori:
@@ -49,23 +48,18 @@ class MaskDecoder(nn.Module):
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
         self.output_hypernetworks_mlps = nn.ModuleList(
-            [
-                MLP(transformer_dim, transformer_dim, transformer_dim, 3)
-                for i in range(self.num_mask_tokens)
-            ]
+            [MLP(transformer_dim, transformer_dim, transformer_dim, 3) for i in range(self.num_mask_tokens)]
         )
         self.encoder_mapper = MLP(embedding_input_dim, transformer_dim, transformer_dim, 3)
         self.output_upscaling = nn.Sequential(
-            nn.Linear(transformer_dim+448, transformer_dim),
+            nn.Linear(transformer_dim + 448, transformer_dim),
             nn.LayerNorm(transformer_dim),
             nn.GELU(),
             nn.Linear(transformer_dim, transformer_dim),
             nn.GELU(),
         )
 
-        self.iou_prediction_head = MLP(
-            transformer_dim, iou_head_hidden_dim, self.num_mask_tokens, iou_head_depth
-        )
+        self.iou_prediction_head = MLP(transformer_dim, iou_head_hidden_dim, self.num_mask_tokens, iou_head_depth)
 
     def forward(
         self,
@@ -76,7 +70,7 @@ class MaskDecoder(nn.Module):
         aux_inputs: AuxInputs,
         multimask_output: bool,
         pf_feat: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
 
         if multimask_output:
             mask_slice = slice(1, None)
@@ -87,14 +81,13 @@ class MaskDecoder(nn.Module):
 
         masks, iou_pred = self.predict_masks(
             pc_embeddings=pc_embeddings,
-            pf_feat = pf_feat,
+            pf_feat=pf_feat,
             pc_pe=pc_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
             aux_inputs=aux_inputs,
             mask_slice=mask_slice,
         )
-
 
         return masks, iou_pred
 
@@ -107,13 +100,9 @@ class MaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         aux_inputs: AuxInputs,
         mask_slice: slice = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
-        output_tokens = torch.cat(
-            [self.iou_token.weight, self.mask_tokens.weight], dim=0
-        )
-        output_tokens = output_tokens.unsqueeze(0).expand(
-            sparse_prompt_embeddings.size(0), -1, -1
-        )
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
+        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
+        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
         repeats = tokens.shape[0] // pc_embeddings.shape[0]
         src = repeat_interleave(pc_embeddings, repeats, dim=0)
@@ -141,20 +130,16 @@ class MaskDecoder(nn.Module):
         interp_embedding = interpolate_features(src, interp_index, interp_weight)
         if pf_feat.size(0) != interp_embedding.size(0):
             pf_feat = repeat_interleave(pf_feat, _repeats, dim=0)
-        interp_embedding = torch.cat(
-            (interp_embedding, pf_feat), dim=-1
-        )
+        interp_embedding = torch.cat((interp_embedding, pf_feat), dim=-1)
         upscaled_embedding = self.output_upscaling(interp_embedding)
 
-        hyper_in_list: List[torch.Tensor] = []
+        hyper_in_list: list[torch.Tensor] = []
         mask_indices = list(range(self.num_mask_tokens))
         if mask_slice is not None:
             mask_indices = mask_indices[mask_slice]
         for i in mask_indices:
-            hyper_in_list.append(
-                self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :])
-            )
-        hyper_in = torch.stack(hyper_in_list, dim=1)  
+            hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
+        hyper_in = torch.stack(hyper_in_list, dim=1)
         masks = hyper_in @ upscaled_embedding.transpose(-1, -2)
 
         iou_pred = self.iou_prediction_head(iou_token_out)
@@ -178,9 +163,7 @@ class MLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(
-            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
-        )
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
         self.sigmoid_output = sigmoid_output
 
     def forward(self, x):
@@ -189,4 +172,3 @@ class MLP(nn.Module):
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x
-

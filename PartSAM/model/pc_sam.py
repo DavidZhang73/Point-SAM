@@ -4,20 +4,17 @@ References:
 - https://github.com/facebookresearch/segment-anything/blob/6fdee8f2727f4506cfbbe553e23b895e27956588/segment_anything/modeling/sam.py
 """
 
-from typing import Dict, List
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torkit3d.nn.functional import batch_index_select
+
+from partfield.model.PVCNN.encoder_pc import sample_triplane_feat
 
 from .common import repeat_interleave
-from .mask_decoder import AuxInputs, MaskDecoder, MLP
+from .mask_decoder import MLP, AuxInputs, MaskDecoder
 from .pc_encoder import PFEncoderDual
 from .prompt_encoder import MaskEncoder, PointEncoder
-from partfield.model.PVCNN.encoder_pc import TriPlanePC2Encoder, sample_triplane_feat
 
-  
+
 class PartSAM(nn.Module):
     def __init__(
         self,
@@ -43,7 +40,6 @@ class PartSAM(nn.Module):
         self.patches = None
         self.pf_feat = None
         self.part_planes = None
- 
 
     def predict_masks(
         self,
@@ -67,16 +63,19 @@ class PartSAM(nn.Module):
         """
         # pc_embeddings: [B, num_patches, D]
         if self.pc_embeddings == None:
-            patches, pf_feat, part_planes = self.pc_encoder(coords,color, normal)
+            patches, pf_feat, part_planes = self.pc_encoder(coords, color, normal)
             pc_embeddings = patches["embeddings"]
             self.pc_embeddings = pc_embeddings
             self.patches = patches
             self.pf_feat = pf_feat
             self.part_planes = part_planes
         else:
-            pc_embeddings, patches, pf_feat, part_planes = self.pc_embeddings, self.patches, self.pf_feat, self.part_planes
-
-
+            pc_embeddings, patches, pf_feat, part_planes = (
+                self.pc_embeddings,
+                self.patches,
+                self.pf_feat,
+                self.part_planes,
+            )
 
         centers = patches["centers"]  # [B, num_patches, 3]
         knn_idx = patches["knn_idx"]  # [B, N, K]
@@ -92,8 +91,8 @@ class PartSAM(nn.Module):
 
         # [B * M, num_queries, D]
         sparse_embeddings = self.point_encoder(prompt_coords, prompt_labels)
-        sparse_embeddings =  sparse_embeddings + self.prompt_point_mapper(prompt_point_pffeat)
-        
+        sparse_embeddings = sparse_embeddings + self.prompt_point_mapper(prompt_point_pffeat)
+
         # [B * M, num_patches, D] or [B, num_patches, D] (if prompt_masks=None)
         dense_embeddings = self.mask_encoder(
             prompt_masks,
@@ -117,6 +116,6 @@ class PartSAM(nn.Module):
             dense_embeddings,
             aux_inputs=aux_inputs,
             multimask_output=multimask_output,
-            pf_feat = pf_feat
+            pf_feat=pf_feat,
         )
         return masks, iou_preds

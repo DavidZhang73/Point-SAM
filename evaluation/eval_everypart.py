@@ -2,32 +2,29 @@ import sys
 
 sys.path.append(".")
 
-import os
 import argparse
+import gc
+import os
+
 import hydra
-from omegaconf import OmegaConf
-from accelerate.utils import set_seed
-from PartSAM.utils.torch_utils import replace_with_fused_layernorm
-from safetensors.torch import load_model
-import matplotlib.colors as mcolors
+import numpy as np
 import pointops
 import torch
-import numpy as np
 import trimesh
-import gc
-from torch.utils.data import ConcatDataset, DataLoader
-from utils.ValDataset import ValDataset,collate_fn_eval
-from collections import defaultdict,Counter, deque
+from accelerate.utils import set_seed
+from omegaconf import OmegaConf
+from safetensors.torch import load_model
+from torch.utils.data import DataLoader
 from tqdm import tqdm
-import multiprocessing as mp
+
+from PartSAM.utils.torch_utils import replace_with_fused_layernorm
 from utils.infer_utils import *
+from utils.ValDataset import ValDataset, collate_fn_eval
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config", type=str, default="partsam", help="path to config file"
-    )
+    parser.add_argument("--config", type=str, default="partsam", help="path to config file")
     parser.add_argument("--config_dir", type=str, default="../configs")
     args, unknown_args = parser.parse_known_args()
 
@@ -66,16 +63,18 @@ def main():
         collate_fn=collate_fn_eval,
     )
     for idx, data in enumerate(tqdm(val_dataloader, desc="Evaluating")):
-        
         for k, v in data.items():
             if isinstance(v, torch.Tensor):
                 data[k] = v.cuda(non_blocking=True)
             elif isinstance(v, list) and len(v) > 0 and isinstance(v[0], torch.Tensor):
                 data[k] = [t.cuda(non_blocking=True) for t in v]
         try:
-            data_input = {k: (v.clone() if isinstance(v, torch.Tensor) else v.copy() if isinstance(v, list) else v) for k, v in data.items()}
+            data_input = {
+                k: (v.clone() if isinstance(v, torch.Tensor) else v.copy() if isinstance(v, list) else v)
+                for k, v in data.items()
+            }
 
-        except Exception as e:
+        except Exception:
             continue
 
         data_input.pop("ids", None)
@@ -84,7 +83,7 @@ def main():
         coord_offset = torch.tensor([coord.shape[0]]).cuda()
         fps_point_number = cfg.eval_params.fps_point_number
         new_coord_offset = torch.tensor([fps_point_number]).cuda()
-        fps_idx = pointops.farthest_point_sampling(coord,coord_offset,new_coord_offset)
+        fps_idx = pointops.farthest_point_sampling(coord, coord_offset, new_coord_offset)
         prompt_labels = torch.tensor([1], dtype=torch.long).unsqueeze(0).cuda()
         masks = []
         scores = []
@@ -92,11 +91,10 @@ def main():
 
         with torch.no_grad():
             for batch_start in range(0, fps_idx.size(0), batch_size):
-                
                 batch_end = min(batch_start + batch_size, fps_idx.size(0))
                 batch_indices = range(batch_start, batch_end)
                 selected_indices = fps_idx[batch_start:batch_end]
-                prompt_points_temp = coord[selected_indices].unsqueeze(1) 
+                prompt_points_temp = coord[selected_indices].unsqueeze(1)
                 data_in = {
                     "coords": data_input["coords"][0].repeat(len(batch_indices), 1, 1),
                     "color": data_input["color"][0].repeat(len(batch_indices), 1, 1),
@@ -105,8 +103,8 @@ def main():
                     "vertices": data_input["vertices"][0].repeat(len(batch_indices), 1, 1),
                     "faces": data_input["faces"][0].repeat(len(batch_indices), 1, 1),
                     "prompt_coords": prompt_points_temp,
-                    "selected_indices": selected_indices,  
-                    "prompt_labels": prompt_labels.expand(len(batch_indices), -1)
+                    "selected_indices": selected_indices,
+                    "prompt_labels": prompt_labels.expand(len(batch_indices), -1),
                 }
 
                 batch_masks, batch_scores = model.predict_masks(**data_in)
@@ -116,13 +114,12 @@ def main():
                 torch.cuda.empty_cache()
                 gc.collect()
 
-
         masks = torch.cat(masks, dim=0)
         scores = torch.cat(scores, dim=0)
-        masks = masks.reshape(-1, masks.size(2))>0
-        scores = scores.reshape(scores.size(0)*scores.size(1), -1)
+        masks = masks.reshape(-1, masks.size(2)) > 0
+        scores = scores.reshape(scores.size(0) * scores.size(1), -1)
         iou_thes = cfg.eval_params.iou_threshold
-        top_indices = (scores>iou_thes).squeeze()
+        top_indices = (scores > iou_thes).squeeze()
         nms_thes = cfg.eval_params.nms_threshold
         masks = masks[top_indices]
         scores = scores[top_indices]
@@ -130,18 +127,21 @@ def main():
         model.labels = None
         model.pc_embeddings = None
 
-        print(  f"Number of masks after Thersholding: {masks.shape[0]}")
+        print(f"Number of masks after Thersholding: {masks.shape[0]}")
 
         nms_indices = nms(masks, scores, threshold=nms_thes)
-        print(  f"Number of masks after NMS: {len(nms_indices)}")
+        print(f"Number of masks after NMS: {len(nms_indices)}")
         filtered_masks = masks[nms_indices]
-        
+
         sorted_masks = sort_masks_by_area(filtered_masks)
         labels = torch.full((sorted_masks.size(1),), -1)
         for i in range(len(filtered_masks)):
             labels[sorted_masks[i]] = i
 
-        mesh = trimesh.Trimesh(vertices=(data_input["vertices"][0].squeeze(0)).cpu().numpy(), faces=(data_input["faces"][0].squeeze(0)).cpu().numpy())
+        mesh = trimesh.Trimesh(
+            vertices=(data_input["vertices"][0].squeeze(0)).cpu().numpy(),
+            faces=(data_input["faces"][0].squeeze(0)).cpu().numpy(),
+        )
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.dump(concatenate=True)
         mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh)
@@ -165,11 +165,10 @@ def main():
         mesh_group[~valid_mask] = mesh_group[valid_mask][indices]
         mesh = post_processing(mesh_group, mesh, cfg.eval_params)
 
-        id = data['ids'][0]
-        mesh_save_path = os.path.join(f"results", f"{id}.ply")
+        id = data["ids"][0]
+        mesh_save_path = os.path.join("results", f"{id}.ply")
         print(f"Saving mesh to {mesh_save_path}")
         mesh.export(mesh_save_path)
-
 
 
 if __name__ == "__main__":

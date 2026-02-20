@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class VanillaMLP(nn.Module):
     def __init__(self, input_dim, output_dim, out_activation, n_hidden_layers=4, n_neurons=64, activation="ReLU"):
         super().__init__()
@@ -14,14 +15,10 @@ class VanillaMLP(nn.Module):
         ]
         for i in range(self.n_hidden_layers - 1):
             layers += [
-                self.make_linear(
-                    self.n_neurons, self.n_neurons, is_first=False, is_last=False
-                ),
+                self.make_linear(self.n_neurons, self.n_neurons, is_first=False, is_last=False),
                 self.make_activation(),
             ]
-        layers += [
-            self.make_linear(self.n_neurons, output_dim, is_first=False, is_last=True)
-        ]
+        layers += [self.make_linear(self.n_neurons, output_dim, is_first=False, is_last=True)]
         if self.out_activation == "sigmoid":
             layers += [nn.Sigmoid()]
         elif self.out_activation == "tanh":
@@ -29,9 +26,9 @@ class VanillaMLP(nn.Module):
         elif self.out_activation == "hardtanh":
             layers += [nn.Hardtanh()]
         elif self.out_activation == "GELU":
-            layers += [nn.GELU()]            
+            layers += [nn.GELU()]
         elif self.out_activation == "RELU":
-            layers += [nn.ReLU()]  
+            layers += [nn.ReLU()]
         else:
             raise NotImplementedError
         self.layers = nn.Sequential(*layers)

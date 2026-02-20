@@ -1,10 +1,10 @@
 import torch.nn as nn
 
-__all__ = ['SharedMLP']
+__all__ = ["SharedMLP"]
 
 
 class SharedMLP(nn.Module):
-    def __init__(self, in_channels, out_channels, dim=1, device='cuda'):
+    def __init__(self, in_channels, out_channels, dim=1, device="cuda"):
         super().__init__()
         # print('==> SharedMLP device: ', device)
         if dim == 1:
@@ -24,7 +24,8 @@ class SharedMLP(nn.Module):
                     conv(in_channels, oc, 1, device=device),
                     bn(oc, device=device),
                     nn.ReLU(True),
-                ])
+                ]
+            )
             in_channels = oc
         self.layers = nn.Sequential(*layers)
 

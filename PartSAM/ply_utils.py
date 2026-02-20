@@ -3,7 +3,7 @@ import torch
 
 
 def load_ply(filename):
-    with open(filename, "r") as rf:
+    with open(filename) as rf:
         while True:
             try:
                 line = rf.readline()
@@ -71,11 +71,7 @@ def visualize_prompts(path, points, prompt, labels, atol=0.005, points_num=1000)
     colors = np.ones_like(points)
     for i in range(prompt.shape[0]):
         start = -points_num * (len(prompt) - i)
-        end = (
-            -points_num * (len(prompt) - i - 1)
-            if -points_num * (len(prompt) - i - 1) < 0
-            else -1
-        )
+        end = -points_num * (len(prompt) - i - 1) if -points_num * (len(prompt) - i - 1) < 0 else -1
         colors[start:end] = [1, 0, 0] if labels[i] else [0, 1, 0]
     save_ply(path, points, colors)
 

@@ -2,7 +2,7 @@ import torch.nn as nn
 
 from . import functional as F
 
-__all__ = ['KLLoss']
+__all__ = ["KLLoss"]
 
 
 class KLLoss(nn.Module):

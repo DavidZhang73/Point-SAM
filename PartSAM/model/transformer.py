@@ -5,11 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 # https://github.com/facebookresearch/segment-anything/blob/6fdee8f2727f4506cfbbe553e23b895e27956588/segment_anything/modeling/transformer.py
 
+import math
+
 import torch
 from torch import Tensor, nn
-
-import math
-from typing import Tuple, Type
 
 
 class TwoWayTransformer(nn.Module):
@@ -19,7 +18,7 @@ class TwoWayTransformer(nn.Module):
         embedding_dim: int,
         num_heads: int,
         mlp_dim: int,
-        activation: Type[nn.Module] = nn.ReLU,
+        activation: type[nn.Module] = nn.ReLU,
         attention_downsample_rate: int = 2,
     ) -> None:
         """
@@ -53,9 +52,7 @@ class TwoWayTransformer(nn.Module):
                 )
             )
 
-        self.final_attn_token_to_image = Attention(
-            embedding_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
+        self.final_attn_token_to_image = Attention(embedding_dim, num_heads, downsample_rate=attention_downsample_rate)
         self.norm_final_attn = nn.LayerNorm(embedding_dim)
 
     def forward(
@@ -63,12 +60,12 @@ class TwoWayTransformer(nn.Module):
         pc_embedding: Tensor,
         pc_pe: Tensor,
         point_embedding: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         """
         Args:
           pc_embedding (torch.Tensor): point cloud to attend to. Should be shape
             B x N_pc_tokens x embedding_dim.
-          pc_pe (torch.Tensor): the positional encoding to add to the point cloud. 
+          pc_pe (torch.Tensor): the positional encoding to add to the point cloud.
             Must have the same shape as pc_embedding.
           point_embedding (torch.Tensor): the embedding to add to the query points.
             Must have shape B x N_points x embedding_dim for any N_points.
@@ -90,8 +87,6 @@ class TwoWayTransformer(nn.Module):
                 key_pe=pc_pe,
             )
 
-        
-
         # Apply the final attention layer from the points to the image
         q = queries + point_embedding
         k = keys + pc_pe
@@ -108,7 +103,7 @@ class TwoWayAttentionBlock(nn.Module):
         embedding_dim: int,
         num_heads: int,
         mlp_dim: int = 2048,
-        activation: Type[nn.Module] = nn.ReLU,
+        activation: type[nn.Module] = nn.ReLU,
         attention_downsample_rate: int = 2,
         skip_first_layer_pe: bool = False,
     ) -> None:
@@ -129,24 +124,18 @@ class TwoWayAttentionBlock(nn.Module):
         self.self_attn = Attention(embedding_dim, num_heads)
         self.norm1 = nn.LayerNorm(embedding_dim)
 
-        self.cross_attn_token_to_image = Attention(
-            embedding_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_token_to_image = Attention(embedding_dim, num_heads, downsample_rate=attention_downsample_rate)
         self.norm2 = nn.LayerNorm(embedding_dim)
 
         self.mlp = MLPBlock(embedding_dim, mlp_dim, activation)
         self.norm3 = nn.LayerNorm(embedding_dim)
 
         self.norm4 = nn.LayerNorm(embedding_dim)
-        self.cross_attn_image_to_token = Attention(
-            embedding_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_image_to_token = Attention(embedding_dim, num_heads, downsample_rate=attention_downsample_rate)
 
         self.skip_first_layer_pe = skip_first_layer_pe
 
-    def forward(
-        self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor) -> tuple[Tensor, Tensor]:
         # Self attention block
         if self.skip_first_layer_pe:
             queries = self.self_attn(q=queries, k=queries, v=queries)
@@ -194,9 +183,7 @@ class Attention(nn.Module):
         self.embedding_dim = embedding_dim
         self.internal_dim = embedding_dim // downsample_rate
         self.num_heads = num_heads
-        assert (
-            self.internal_dim % num_heads == 0
-        ), "num_heads must divide embedding_dim."
+        assert self.internal_dim % num_heads == 0, "num_heads must divide embedding_dim."
 
         self.q_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.k_proj = nn.Linear(embedding_dim, self.internal_dim)
@@ -237,13 +224,14 @@ class Attention(nn.Module):
 
         return out
 
+
 # https://github.com/facebookresearch/segment-anything/blob/6fdee8f2727f4506cfbbe553e23b895e27956588/segment_anything/modeling/common.py#L13
 class MLPBlock(nn.Module):
     def __init__(
         self,
         embedding_dim: int,
         mlp_dim: int,
-        act: Type[nn.Module] = nn.GELU,
+        act: type[nn.Module] = nn.GELU,
     ) -> None:
         super().__init__()
         self.lin1 = nn.Linear(embedding_dim, mlp_dim)

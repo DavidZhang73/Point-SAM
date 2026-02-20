@@ -1,30 +1,25 @@
-import torch
-import boto3
-import json
-from os import path as osp
+import gc
+import math
+import os
+import tempfile
+
 # from botocore.config import Config
 # from botocore.exceptions import ClientError
-import h5py
-import io
-import numpy as np
-import skimage
-import trimesh
-import os
-from scipy.spatial import KDTree
-import gc
-from plyfile import PlyData
-
 ## For remeshing
 import mesh2sdf
-import tetgen
-import vtk
-import math
-import tempfile
+import numpy as np
 
 ### For mesh processing
 import pymeshlab
+import skimage
+import tetgen
+import torch
+import trimesh
+import vtk
+from plyfile import PlyData
 
 from partfield.utils import *
+
 
 #########################
 ## To handle quad inputs
@@ -58,7 +53,10 @@ def quad_to_triangle_mesh(F):
     new_faces = np.array(new_faces)
 
     return new_faces
+
+
 #########################
+
 
 class Demo_Dataset(torch.utils.data.Dataset):
     def __init__(self, cfg):
@@ -84,7 +82,6 @@ class Demo_Dataset(torch.utils.data.Dataset):
 
         print("val dataset len:", len(self.data_list))
 
-    
     def __len__(self):
         return len(self.data_list)
 
@@ -102,7 +99,7 @@ class Demo_Dataset(torch.utils.data.Dataset):
 
         # Extract vertex data
         vertex_data = ply_data["vertex"]
-        
+
         # Convert to NumPy array (x, y, z)
         points = np.vstack([vertex_data["x"], vertex_data["y"], vertex_data["z"]]).T
 
@@ -154,16 +151,16 @@ class Demo_Dataset(torch.utils.data.Dataset):
                 ms.add_mesh(ml_mesh, "from_trimesh")
 
                 # Apply filters
-                ms.apply_filter('meshing_remove_duplicate_faces')
-                ms.apply_filter('meshing_remove_duplicate_vertices')
+                ms.apply_filter("meshing_remove_duplicate_faces")
+                ms.apply_filter("meshing_remove_duplicate_vertices")
                 percentageMerge = pymeshlab.PercentageValue(0.5)
-                ms.apply_filter('meshing_merge_close_vertices', threshold=percentageMerge)
-                ms.apply_filter('meshing_remove_unreferenced_vertices')
+                ms.apply_filter("meshing_merge_close_vertices", threshold=percentageMerge)
+                ms.apply_filter("meshing_remove_unreferenced_vertices")
 
                 # Save or extract mesh
                 processed = ms.current_mesh()
                 mesh.vertices = processed.vertex_matrix()
-                mesh.faces = processed.face_matrix()               
+                mesh.faces = processed.face_matrix()
 
                 print("after preprocessing...")
                 print(mesh.vertices.shape)
@@ -172,31 +169,30 @@ class Demo_Dataset(torch.utils.data.Dataset):
             ### Save input
             save_dir = f"exp_results/{self.result_name}"
             os.makedirs(save_dir, exist_ok=True)
-            view_id = 0            
-            mesh.export(f'{save_dir}/input_{uid}_{view_id}.ply')                
+            view_id = 0
+            mesh.export(f"{save_dir}/input_{uid}_{view_id}.ply")
 
+            pc, _ = trimesh.sample.sample_surface(mesh, self.pc_num_pts)
 
-            pc, _ = trimesh.sample.sample_surface(mesh, self.pc_num_pts) 
+        result = {"uid": uid}
 
-        result = {
-                    'uid': uid
-                }
-
-        result['pc'] = torch.tensor(pc, dtype=torch.float32)
+        result["pc"] = torch.tensor(pc, dtype=torch.float32)
 
         if not self.is_pc:
-            result['vertices'] = mesh.vertices
-            result['faces'] = mesh.faces
+            result["vertices"] = mesh.vertices
+            result["faces"] = mesh.faces
 
         return result
 
     def __getitem__(self, index):
-        
+
         gc.collect()
 
         return self.get_model(self.data_list[index])
 
+
 ##############
+
 
 ###############################
 class Demo_Remesh_Dataset(torch.utils.data.Dataset):
@@ -209,7 +205,7 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
 
         selected = []
         for f in all_files:
-            if (".obj" in f or ".glb" in f):
+            if ".obj" in f or ".glb" in f:
                 selected.append(f)
 
         self.data_list = selected
@@ -220,10 +216,8 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
 
         print("val dataset len:", len(self.data_list))
 
-    
     def __len__(self):
         return len(self.data_list)
-
 
     def get_model(self, ply_file):
 
@@ -231,7 +225,7 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
 
         ####
         obj_path = os.path.join(self.data_path, ply_file)
-        mesh =  load_mesh_util(obj_path)
+        mesh = load_mesh_util(obj_path)
         vertices = mesh.vertices
         faces = mesh.faces
 
@@ -252,17 +246,16 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
             ms.add_mesh(ml_mesh, "from_trimesh")
 
             # Apply filters
-            ms.apply_filter('meshing_remove_duplicate_faces')
-            ms.apply_filter('meshing_remove_duplicate_vertices')
+            ms.apply_filter("meshing_remove_duplicate_faces")
+            ms.apply_filter("meshing_remove_duplicate_vertices")
             percentageMerge = pymeshlab.PercentageValue(0.5)
-            ms.apply_filter('meshing_merge_close_vertices', threshold=percentageMerge)
-            ms.apply_filter('meshing_remove_unreferenced_vertices')
-
+            ms.apply_filter("meshing_merge_close_vertices", threshold=percentageMerge)
+            ms.apply_filter("meshing_remove_unreferenced_vertices")
 
             # Save or extract mesh
             processed = ms.current_mesh()
             mesh.vertices = processed.vertex_matrix()
-            mesh.faces = processed.face_matrix()               
+            mesh.faces = processed.face_matrix()
 
             print("after preprocessing...")
             print(mesh.vertices.shape)
@@ -271,12 +264,12 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
         ### Save input
         save_dir = f"exp_results/{self.result_name}"
         os.makedirs(save_dir, exist_ok=True)
-        view_id = 0            
-        mesh.export(f'{save_dir}/input_{uid}_{view_id}.ply')   
+        view_id = 0
+        mesh.export(f"{save_dir}/input_{uid}_{view_id}.ply")
 
         try:
             ###### Remesh ######
-            size= 256
+            size = 256
             level = 2 / size
 
             sdf = mesh2sdf.core.compute(mesh.vertices, mesh.faces, size)
@@ -290,18 +283,20 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
 
             #### Make tet #####
             components = trimesh.Trimesh(vertices, faces).split(only_watertight=False)
-            new_mesh = [] #trimesh.Trimesh()
+            new_mesh = []  # trimesh.Trimesh()
             if len(components) > 100000:
                 raise NotImplementedError
             for i, c in enumerate(components):
                 c.fix_normals()
-                new_mesh.append(c) #trimesh.util.concatenate(new_mesh, c)
+                new_mesh.append(c)  # trimesh.util.concatenate(new_mesh, c)
             new_mesh = trimesh.util.concatenate(new_mesh)
 
             # generate tet mesh
             tet = tetgen.TetGen(new_mesh.vertices, new_mesh.faces)
-            tet.tetrahedralize(plc=True, nobisect=1., quality=True, fixedvolume=True, maxvolume=math.sqrt(2) / 12 * (2 / size) ** 3)
-            tmp_vtk = tempfile.NamedTemporaryFile(suffix='.vtk', delete=True)
+            tet.tetrahedralize(
+                plc=True, nobisect=1.0, quality=True, fixedvolume=True, maxvolume=math.sqrt(2) / 12 * (2 / size) ** 3
+            )
+            tmp_vtk = tempfile.NamedTemporaryFile(suffix=".vtk", delete=True)
             tet.grid.save(tmp_vtk.name)
 
             # extract surface mesh from tet mesh
@@ -313,11 +308,11 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
             surface_filter.Update()
             polydata = surface_filter.GetOutput()
             writer = vtk.vtkOBJWriter()
-            tmp_obj = tempfile.NamedTemporaryFile(suffix='.obj', delete=True)
+            tmp_obj = tempfile.NamedTemporaryFile(suffix=".obj", delete=True)
             writer.SetFileName(tmp_obj.name)
             writer.SetInputData(polydata)
             writer.Update()
-            new_mesh =  load_mesh_util(tmp_obj.name)
+            new_mesh = load_mesh_util(tmp_obj.name)
             ##########################
 
             new_mesh.vertices = new_mesh.vertices * (2.0 / size) - 1.0  # normalize it to [-1, 1]
@@ -327,22 +322,20 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
 
         except:
             print("Error in tet.")
-            mesh = mesh 
+            mesh = mesh
 
-        pc, _ = trimesh.sample.sample_surface(mesh, self.pc_num_pts) 
+        pc, _ = trimesh.sample.sample_surface(mesh, self.pc_num_pts)
 
-        result = {
-                    'uid': uid
-                }
+        result = {"uid": uid}
 
-        result['pc'] = torch.tensor(pc, dtype=torch.float32)
-        result['vertices'] = mesh.vertices
-        result['faces'] = mesh.faces
+        result["pc"] = torch.tensor(pc, dtype=torch.float32)
+        result["vertices"] = mesh.vertices
+        result["faces"] = mesh.faces
 
         return result
 
     def __getitem__(self, index):
-        
+
         gc.collect()
 
         return self.get_model(self.data_list[index])
@@ -363,4 +356,3 @@ class Correspondence_Demo_Dataset(Demo_Dataset):
         self.result_name = cfg.result_name
 
         print("val dataset len:", len(self.data_list))
-    

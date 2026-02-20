@@ -1,21 +1,32 @@
 import torch.nn as nn
 
 from . import functional as F
-from .voxelization import Voxelization
 from .shared_mlp import SharedMLP
-import torch
+from .voxelization import Voxelization
 
-__all__ = ['PVConv']
+__all__ = ["PVConv"]
+
 
 def zero_module(module):
     for p in module.parameters():
         nn.init.zeros_(p)
     return module
 
+
 class PVConv(nn.Module):
     def __init__(
-            self, in_channels, out_channels, kernel_size, resolution, with_se=False, normalize=True, eps=0, scale_pvcnn=False,
-            device='cuda',if_zero=False):
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        resolution,
+        with_se=False,
+        normalize=True,
+        eps=0,
+        scale_pvcnn=False,
+        device="cuda",
+        if_zero=False,
+    ):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels

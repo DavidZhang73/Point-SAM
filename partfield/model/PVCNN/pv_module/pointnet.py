@@ -5,7 +5,7 @@ from . import functional as F
 from .ball_query import BallQuery
 from .shared_mlp import SharedMLP
 
-__all__ = ['PointNetAModule', 'PointNetSAModule', 'PointNetFPModule']
+__all__ = ["PointNetAModule", "PointNetSAModule", "PointNetFPModule"]
 
 
 class PointNetAModule(nn.Module):
@@ -21,8 +21,8 @@ class PointNetAModule(nn.Module):
         for _out_channels in out_channels:
             mlps.append(
                 SharedMLP(
-                    in_channels=in_channels + (3 if include_coordinates else 0),
-                    out_channels=_out_channels, dim=1)
+                    in_channels=in_channels + (3 if include_coordinates else 0), out_channels=_out_channels, dim=1
+                )
             )
             total_out_channels += _out_channels[-1]
 
@@ -44,7 +44,7 @@ class PointNetAModule(nn.Module):
             return self.mlps[0](features).max(dim=-1, keepdim=True).values, coords
 
     def extra_repr(self):
-        return f'out_channels={self.out_channels}, include_coordinates={self.include_coordinates}'
+        return f"out_channels={self.out_channels}, include_coordinates={self.include_coordinates}"
 
 
 class PointNetSAModule(nn.Module):
@@ -69,8 +69,8 @@ class PointNetSAModule(nn.Module):
             )
             mlps.append(
                 SharedMLP(
-                    in_channels=in_channels + (3 if include_coordinates else 0),
-                    out_channels=_out_channels, dim=2)
+                    in_channels=in_channels + (3 if include_coordinates else 0), out_channels=_out_channels, dim=2
+                )
             )
             total_out_channels += _out_channels[-1]
 
@@ -91,7 +91,7 @@ class PointNetSAModule(nn.Module):
             return features_list[0], centers_coords
 
     def extra_repr(self):
-        return f'num_centers={self.num_centers}, out_channels={self.out_channels}'
+        return f"num_centers={self.num_centers}, out_channels={self.out_channels}"
 
 
 class PointNetFPModule(nn.Module):
@@ -107,7 +107,5 @@ class PointNetFPModule(nn.Module):
             points_coords, centers_coords, centers_features, points_features = inputs
         interpolated_features = F.nearest_neighbor_interpolate(points_coords, centers_coords, centers_features)
         if points_features is not None:
-            interpolated_features = torch.cat(
-                [interpolated_features, points_features], dim=1
-            )
+            interpolated_features = torch.cat([interpolated_features, points_features], dim=1)
         return self.mlp(interpolated_features), points_coords

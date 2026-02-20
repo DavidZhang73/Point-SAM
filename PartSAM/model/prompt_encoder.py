@@ -1,13 +1,8 @@
-from typing import Optional, Union
-
 import numpy as np
 import torch
 from torch import nn
 
-from torkit3d.nn.functional import batch_index_select
-
 from .common import PatchEncoder, group_with_centers_and_knn
-from .mask_decoder import MLP
 
 
 # https://github.com/facebookresearch/segment-anything/blob/6fdee8f2727f4506cfbbe553e23b895e27956588/segment_anything/modeling/prompt_encoder.py
@@ -16,7 +11,7 @@ class PositionEmbeddingRandom(nn.Module):
     Positional encoding using random spatial frequencies.
     """
 
-    def __init__(self, num_pos_feats: int = 64, scale: Optional[float] = 1.0) -> None:
+    def __init__(self, num_pos_feats: int = 64, scale: float | None = 1.0) -> None:
         super().__init__()
         if scale is None or scale <= 0.0:
             scale = 1.0
@@ -44,7 +39,7 @@ class PositionEmbeddingRandom(nn.Module):
         """
         if (coords < -1.0 - 1e-6).any() or (coords > 1.0 + 1e-6).any():
             print("Bounds: ", (coords.min(), coords.max()))
-            raise ValueError(f"Input coordinates must be normalized to [-1, 1].")
+            raise ValueError("Input coordinates must be normalized to [-1, 1].")
         # TODO: whether to convert to float?
         return self._pe_encoding(coords)
 
@@ -56,9 +51,7 @@ class PointEncoder(nn.Module):
         self.pe_layer = PositionEmbeddingRandom(embed_dim // 2)
 
         self.num_point_embeddings: int = 2  # pos/neg point
-        point_embeddings = [
-            nn.Embedding(1, embed_dim) for _ in range(self.num_point_embeddings)
-        ]
+        point_embeddings = [nn.Embedding(1, embed_dim) for _ in range(self.num_point_embeddings)]
         self.point_embeddings = nn.ModuleList(point_embeddings)
 
     def forward(self, points: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -75,7 +68,7 @@ class PointEncoder(nn.Module):
         point_embedding = self.pe_layer.forward(points)
         point_embedding[labels == 0] += self.point_embeddings[0].weight
         point_embedding[labels == 1] += self.point_embeddings[1].weight
-        
+
         return point_embedding
 
 
@@ -98,7 +91,7 @@ class MaskEncoder(nn.Module):
 
     def forward(
         self,
-        masks: Union[torch.Tensor, None],
+        masks: torch.Tensor | None,
         coords: torch.Tensor,
         centers: torch.Tensor,
         knn_idx: torch.Tensor,
@@ -176,23 +169,13 @@ class GroupNN(nn.Module):
         neighborhood = torch.repeat_interleave(neighborhood, mask_batch, 0)
 
         # normalize relative position
-        dist = torch.linalg.norm(
-            neighborhood, dim=-1, keepdim=True, ord=2, dtype=xyz.dtype
-        )
+        dist = torch.linalg.norm(neighborhood, dim=-1, keepdim=True, ord=2, dtype=xyz.dtype)
         neighborhood = neighborhood / (dist + 1e-8)
 
-        idx_base = (
-            torch.arange(0, batch_size, device=xyz.device).view(-1, 1) * self.num_group
-        )
+        idx_base = torch.arange(0, batch_size, device=xyz.device).view(-1, 1) * self.num_group
         idx = idx.view(batch_size, num_points) - idx_base
-        idx_base = (
-            torch.arange(0, batch_size * mask_batch, device=xyz.device).view(-1, 1)
-            * self.num_group
-        )
+        idx_base = torch.arange(0, batch_size * mask_batch, device=xyz.device).view(-1, 1) * self.num_group
         idx = torch.repeat_interleave(idx, mask_batch, 0) + idx_base
         idx = idx.view(-1)
-        neighborhood_feats = torch.cat(
-            [feats.unsqueeze(-1), neighborhood, dist], dim=-1
-        )
+        neighborhood_feats = torch.cat([feats.unsqueeze(-1), neighborhood, dist], dim=-1)
         return neighborhood_feats, idx
-

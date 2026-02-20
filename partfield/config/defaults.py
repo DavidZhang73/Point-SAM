@@ -40,8 +40,8 @@ _C.lr = 1e-3
 _C.train = True
 _C.test = False
 
-_C.inference_save_pred_sdf_to_mesh=True
-_C.inference_save_feat_pca=True
+_C.inference_save_pred_sdf_to_mesh = True
+_C.inference_save_feat_pca = True
 _C.name = "test"
 _C.test_subset = False
 _C.test_corres = False
@@ -76,7 +76,7 @@ _C.use_pvcnn = False
 _C.use_pvcnnonly = True
 
 _C.pvcnn = CN()
-_C.pvcnn.point_encoder_type = 'pvcnn'
+_C.pvcnn.point_encoder_type = "pvcnn"
 _C.pvcnn.use_point_scatter = True
 _C.pvcnn.z_triplane_channels = 64
 _C.pvcnn.z_triplane_resolution = 256

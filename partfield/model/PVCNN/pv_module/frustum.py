@@ -5,13 +5,20 @@ import torch.nn.functional as F
 
 from . import functional as PF
 
-__all__ = ['FrustumPointNetLoss', 'get_box_corners_3d']
+__all__ = ["FrustumPointNetLoss", "get_box_corners_3d"]
 
 
 class FrustumPointNetLoss(nn.Module):
     def __init__(
-            self, num_heading_angle_bins, num_size_templates, size_templates, box_loss_weight=1.0,
-            corners_loss_weight=10.0, heading_residual_loss_weight=20.0, size_residual_loss_weight=20.0):
+        self,
+        num_heading_angle_bins,
+        num_size_templates,
+        size_templates,
+        box_loss_weight=1.0,
+        corners_loss_weight=10.0,
+        heading_residual_loss_weight=20.0,
+        size_residual_loss_weight=20.0,
+    ):
         super().__init__()
         self.box_loss_weight = box_loss_weight
         self.corners_loss_weight = corners_loss_weight
@@ -20,28 +27,28 @@ class FrustumPointNetLoss(nn.Module):
 
         self.num_heading_angle_bins = num_heading_angle_bins
         self.num_size_templates = num_size_templates
-        self.register_buffer('size_templates', size_templates.view(self.num_size_templates, 3))
+        self.register_buffer("size_templates", size_templates.view(self.num_size_templates, 3))
         self.register_buffer(
-            'heading_angle_bin_centers', torch.arange(0, 2 * np.pi, 2 * np.pi / self.num_heading_angle_bins)
+            "heading_angle_bin_centers", torch.arange(0, 2 * np.pi, 2 * np.pi / self.num_heading_angle_bins)
         )
 
     def forward(self, inputs, targets):
-        mask_logits = inputs['mask_logits']  # (B, 2, N)
-        center_reg = inputs['center_reg']  # (B, 3)
-        center = inputs['center']  # (B, 3)
-        heading_scores = inputs['heading_scores']  # (B, NH)
-        heading_residuals_normalized = inputs['heading_residuals_normalized']  # (B, NH)
-        heading_residuals = inputs['heading_residuals']  # (B, NH)
-        size_scores = inputs['size_scores']  # (B, NS)
-        size_residuals_normalized = inputs['size_residuals_normalized']  # (B, NS, 3)
-        size_residuals = inputs['size_residuals']  # (B, NS, 3)
+        mask_logits = inputs["mask_logits"]  # (B, 2, N)
+        center_reg = inputs["center_reg"]  # (B, 3)
+        center = inputs["center"]  # (B, 3)
+        heading_scores = inputs["heading_scores"]  # (B, NH)
+        heading_residuals_normalized = inputs["heading_residuals_normalized"]  # (B, NH)
+        heading_residuals = inputs["heading_residuals"]  # (B, NH)
+        size_scores = inputs["size_scores"]  # (B, NS)
+        size_residuals_normalized = inputs["size_residuals_normalized"]  # (B, NS, 3)
+        size_residuals = inputs["size_residuals"]  # (B, NS, 3)
 
-        mask_logits_target = targets['mask_logits']  # (B, N)
-        center_target = targets['center']  # (B, 3)
-        heading_bin_id_target = targets['heading_bin_id']  # (B, )
-        heading_residual_target = targets['heading_residual']  # (B, )
-        size_template_id_target = targets['size_template_id']  # (B, )
-        size_residual_target = targets['size_residual']  # (B, 3)
+        mask_logits_target = targets["mask_logits"]  # (B, N)
+        center_target = targets["center"]  # (B, 3)
+        heading_bin_id_target = targets["heading_bin_id"]  # (B, )
+        heading_residual_target = targets["heading_residual"]  # (B, )
+        size_template_id_target = targets["size_template_id"]  # (B, )
+        size_residual_target = targets["size_residual"]  # (B, 3)
 
         batch_size = center.size(0)
         batch_id = torch.arange(batch_size, device=center.device)
@@ -66,27 +73,32 @@ class FrustumPointNetLoss(nn.Module):
         )
 
         # Bounding box losses
-        heading = (heading_residuals[batch_id, heading_bin_id_target]
-                   + self.heading_angle_bin_centers[heading_bin_id_target])  # (B, )
+        heading = (
+            heading_residuals[batch_id, heading_bin_id_target] + self.heading_angle_bin_centers[heading_bin_id_target]
+        )  # (B, )
         # Warning: in origin code, size_residuals are added twice (issue #43 and #49 in charlesq34/frustum-pointnets)
-        size = (size_residuals[batch_id, size_template_id_target]
-                + self.size_templates[size_template_id_target])  # (B, 3)
+        size = (
+            size_residuals[batch_id, size_template_id_target] + self.size_templates[size_template_id_target]
+        )  # (B, 3)
         corners = get_box_corners_3d(centers=center, headings=heading, sizes=size, with_flip=False)  # (B, 3, 8)
         heading_target = self.heading_angle_bin_centers[heading_bin_id_target] + heading_residual_target  # (B, )
         size_target = self.size_templates[size_template_id_target] + size_residual_target  # (B, 3)
         corners_target, corners_target_flip = get_box_corners_3d(
-            centers=center_target, headings=heading_target,
-            sizes=size_target, with_flip=True)  # (B, 3, 8)
+            centers=center_target, headings=heading_target, sizes=size_target, with_flip=True
+        )  # (B, 3, 8)
         corners_loss = PF.huber_loss(
-            torch.min(
-                torch.norm(corners - corners_target, dim=1), torch.norm(corners - corners_target_flip, dim=1)
-            ), delta=1.0)
+            torch.min(torch.norm(corners - corners_target, dim=1), torch.norm(corners - corners_target_flip, dim=1)),
+            delta=1.0,
+        )
         # Summing up
         loss = mask_loss + self.box_loss_weight * (
-                center_loss + center_reg_loss + heading_loss + size_loss
-                + self.heading_residual_loss_weight * heading_residual_normalized_loss
-                + self.size_residual_loss_weight * size_residual_normalized_loss
-                + self.corners_loss_weight * corners_loss
+            center_loss
+            + center_reg_loss
+            + heading_loss
+            + size_loss
+            + self.heading_residual_loss_weight * heading_residual_normalized_loss
+            + self.size_residual_loss_weight * size_residual_normalized_loss
+            + self.corners_loss_weight * corners_loss
         )
 
         return loss

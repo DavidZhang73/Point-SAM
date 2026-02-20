@@ -1,48 +1,39 @@
 # https://github.com/baaivision/Uni3D/blob/main/models/point_encoder.py
-from typing import Union
 
-import timm
 import torch
 import torch.nn as nn
-from timm.models.eva import Eva
-from timm.models.vision_transformer import VisionTransformer
+
+from partfield.model.PVCNN.encoder_pc import TriPlanePC2Encoder, sample_triplane_feat
+from partfield.model.triplane import TriplaneTransformer
 
 from .common import KNNGrouper, NNGrouper, PatchEncoder
 
-from partfield.model.UNet.model import ResidualUNet3D
-from partfield.model.triplane import TriplaneTransformer, get_grid_coord 
-from partfield.model.model_utils import VanillaMLP
-from partfield.model.PVCNN.encoder_pc import TriPlanePC2Encoder, sample_triplane_feat
-import numpy as np
 
 def smart_load_state_dict(model, pretrained_dict):
     model_dict = model.state_dict()
-    
+
     # 1. 过滤掉维度不匹配的权重
-    matched_dict = {
-        k: v for k, v in pretrained_dict.items() 
-        if k in model_dict and v.shape == model_dict[k].shape
-    }
-    
+    matched_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and v.shape == model_dict[k].shape}
+
     # 2. 记录不匹配的键（调试用）
     missing_keys = [k for k in pretrained_dict if k not in model_dict]
     shape_mismatch_keys = [
-        k for k in pretrained_dict 
-        if k in model_dict and pretrained_dict[k].shape != model_dict[k].shape
+        k for k in pretrained_dict if k in model_dict and pretrained_dict[k].shape != model_dict[k].shape
     ]
-    
+
     # 3. 加载匹配的权重
     model.load_state_dict(matched_dict, strict=False)
-    
+
     # 打印调试信息
     print(f"Successfully loaded {len(matched_dict)}/{len(pretrained_dict)} parameters")
     if missing_keys:
         print(f"Missing keys (ignored): {missing_keys}")
     if shape_mismatch_keys:
         print(f"Shape mismatch keys (ignored): {shape_mismatch_keys}")
-    
+
     return model
-    
+
+
 class PatchEmbed(nn.Module):
     def __init__(
         self,
@@ -73,6 +64,7 @@ class PatchEmbed(nn.Module):
         x = self.patch_encoder(patch_features)
         patches["embeddings"] = x
         return patches
+
 
 class PatchDropout(nn.Module):
     """Randomly drop patches.
@@ -115,10 +107,7 @@ class PatchDropout(nn.Module):
 
 
 class PFEncoderDual(nn.Module):
-    def __init__(
-        self,
-        patch_embed: PatchEmbed
-    ):
+    def __init__(self, patch_embed: PatchEmbed):
         super().__init__()
         # Patch embedding
         self.patch_embed = patch_embed
@@ -127,15 +116,14 @@ class PFEncoderDual(nn.Module):
         self.partfield = PartField()
         self.partfieldMy = PartFieldPath()
 
-
-    def forward(self, coords, color, normal,only_pf=False):
+    def forward(self, coords, color, normal, only_pf=False):
         # Get triplane features
         planes1 = self.partfield(coords)
         planes2 = self.partfieldMy(coords, color, normal)
         if only_pf:
             planes = planes1
         else:
-            planes = (planes1 + planes2) /2.0
+            planes = (planes1 + planes2) / 2.0
         sdf_planes, part_planes = torch.split(planes, [64, planes.shape[2] - 64], dim=2)
 
         pf_feat = sample_triplane_feat(part_planes, coords)
@@ -146,27 +134,24 @@ class PFEncoderDual(nn.Module):
         else:
             centers = patches["centers"]  # [B, L, 3]
 
-
         return patches, pf_feat, part_planes
-    
 
 
 class PartField(nn.Module):
-    def __init__(
-        self
-    ):
+    def __init__(self):
         super().__init__()
 
         # Transformer encoder
         self.pvcnn = TriPlanePC2Encoder(
-                point_encoder_type='pvcnn',
-                z_triplane_channels=256,
-                z_triplane_resolution=128,
-                device="cuda",
-                shape_min=-1, 
-                shape_length=2,
-                use_2d_feat=False,
-                is_My=False)
+            point_encoder_type="pvcnn",
+            z_triplane_channels=256,
+            z_triplane_resolution=128,
+            device="cuda",
+            shape_min=-1,
+            shape_length=2,
+            use_2d_feat=False,
+            is_My=False,
+        )
         self.triplane_transformer = TriplaneTransformer(
             input_dim=128 * 2,
             transformer_dim=1024,
@@ -176,33 +161,32 @@ class PartField(nn.Module):
             triplane_high_res=128,
             triplane_dim=512,
         )
-
 
     def forward(self, coords):
 
         # Get triplane features
-        pc_feat = self.pvcnn(coords,coords)
+        pc_feat = self.pvcnn(coords, coords)
         # pc_feat = self.pvcnn(coords,coords, add_features=normal)
         planes = self.triplane_transformer(pc_feat)
 
         return planes
-    
+
+
 class PartFieldPath(nn.Module):
-    def __init__(
-        self
-    ):
+    def __init__(self):
         super().__init__()
 
         # Transformer encoder
         self.pvcnn = TriPlanePC2Encoder(
-                point_encoder_type='pvcnn',
-                z_triplane_channels=256,
-                z_triplane_resolution=128,
-                device="cuda",
-                shape_min=-1, 
-                shape_length=2,
-                use_2d_feat=False,
-                is_My=True)
+            point_encoder_type="pvcnn",
+            z_triplane_channels=256,
+            z_triplane_resolution=128,
+            device="cuda",
+            shape_min=-1,
+            shape_length=2,
+            use_2d_feat=False,
+            is_My=True,
+        )
         self.triplane_transformer = TriplaneTransformer(
             input_dim=128 * 2,
             transformer_dim=1024,
@@ -213,16 +197,14 @@ class PartFieldPath(nn.Module):
             triplane_dim=512,
         )
 
-
     def forward(self, coords, color, normal):
 
         # Get triplane features
-        pc_feat = self.pvcnn(coords,coords, add_features=torch.cat([color,normal],dim=2))
+        pc_feat = self.pvcnn(coords, coords, add_features=torch.cat([color, normal], dim=2))
         # pc_feat = self.pvcnn(coords,coords, add_features=normal)
         planes = self.triplane_transformer(pc_feat)
 
         return planes
-
 
 
 class Block(nn.Module):
@@ -251,12 +233,8 @@ class PatchEmbedNN(nn.Module):
 
         self.grouper = NNGrouper(num_patches)
         self.in_proj = nn.Linear(in_channels, hidden_dim)
-        self.blocks1 = nn.Sequential(
-            *[Block(hidden_dim, hidden_dim, hidden_dim) for _ in range(3)]
-        )
-        self.blocks2 = nn.Sequential(
-            *[Block(hidden_dim, hidden_dim, hidden_dim) for _ in range(3)]
-        )
+        self.blocks1 = nn.Sequential(*[Block(hidden_dim, hidden_dim, hidden_dim) for _ in range(3)])
+        self.blocks2 = nn.Sequential(*[Block(hidden_dim, hidden_dim, hidden_dim) for _ in range(3)])
         self.norm = nn.LayerNorm(hidden_dim)
         self.out_proj = nn.Linear(hidden_dim, out_channels)
 
@@ -268,9 +246,7 @@ class PatchEmbedNN(nn.Module):
         x = self.in_proj(patch_features)
         x = self.blocks1(x)  # [B, N, D]
         y = x.new_zeros(x.shape[0], self.grouper.num_groups, x.shape[-1])
-        y.scatter_reduce_(
-            1, nn_idx.unsqueeze(-1).expand_as(x), x, "amax", include_self=False
-        )
+        y.scatter_reduce_(1, nn_idx.unsqueeze(-1).expand_as(x), x, "amax", include_self=False)
         x = self.blocks2(y)
         x = self.norm(x)
         x = self.out_proj(x)
@@ -317,4 +293,3 @@ class PatchEmbedHier(nn.Module):
         patches2["embeddings"] = x2
 
         return [patches1, patches2]
-

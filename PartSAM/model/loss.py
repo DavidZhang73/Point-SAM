@@ -1,5 +1,3 @@
-from typing import Dict, List
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -55,9 +53,7 @@ def dice_loss(
     return loss
 
 
-def compute_mask_loss(
-    logits: torch.Tensor, labels: torch.Tensor, loss_weight_dice: float = 2
-):
+def compute_mask_loss(logits: torch.Tensor, labels: torch.Tensor, loss_weight_dice: float = 2):
     """Loss for mask prediction.
 
     Args:
@@ -90,7 +86,7 @@ def compute_iou(logits: torch.Tensor, targets: torch.Tensor, threshold: float = 
         torch.Tensor: [...]. IoU scores
     """
     targets = targets.unsqueeze(1).expand_as(logits)
-    
+
     assert logits.shape == targets.shape, (logits.shape, targets.shape)
     assert targets.dtype == torch.bool, targets.dtype
     if threshold is None:
@@ -98,6 +94,7 @@ def compute_iou(logits: torch.Tensor, targets: torch.Tensor, threshold: float = 
     else:
         preds = logits.sigmoid() > threshold
     return (preds & targets).sum(-1) / (preds | targets).sum(-1)
+
 
 def compute_iou_original(logits: torch.Tensor, targets: torch.Tensor, threshold: float = None):
     """Compute intersection-over-union (IoU).
@@ -111,7 +108,7 @@ def compute_iou_original(logits: torch.Tensor, targets: torch.Tensor, threshold:
     Returns:
         torch.Tensor: [...]. IoU scores
     """
-    
+
     assert logits.shape == targets.shape, (logits.shape, targets.shape)
     assert targets.dtype == torch.bool, targets.dtype
     if threshold is None:
@@ -129,11 +126,11 @@ def compute_jaccard(logits: torch.Tensor, targets: torch.Tensor, eps: float = 1e
     denominator = (probs.square() + targets.square()).sum(-1) - numerator
     return (numerator + eps) / (denominator + eps)
 
-def contrast_loss(point_feat: torch.Tensor,logit_scale=1.0):
 
+def contrast_loss(point_feat: torch.Tensor, logit_scale=1.0):
 
     featA, featB, featC = torch.split(point_feat, 512, dim=1)
-    
+
     cosAB = torch.exp(F.cosine_similarity(featA, featB, dim=2) * logit_scale)
     cosAC = torch.exp(F.cosine_similarity(featA, featC, dim=2) * logit_scale)
     cosBC = torch.exp(F.cosine_similarity(featB, featC, dim=2) * logit_scale)
@@ -150,7 +147,7 @@ class Criterion(nn.Module):
         self.use_soft_iou = use_soft_iou
         self.iou_loss_weight = iou_loss_weight
 
-    def forward(self, outputs: List[Dict[str, torch.Tensor]], gt_masks,step):
+    def forward(self, outputs: list[dict[str, torch.Tensor]], gt_masks, step):
         # gt_mask: [B*M, N]
         # Follow the "Making the model ambiguity-aware" in Appendix A of SAM.
         # Multimask is only enabled with more than one prompt.
@@ -164,46 +161,33 @@ class Criterion(nn.Module):
                 loss_mask, min_loss_idx = loss_mask.min(dim=1)  # [B*M]
                 batch_idx = torch.arange(min_loss_idx.shape[0])
                 best_masks = masks[batch_idx, min_loss_idx]  # [B*M, N]
-                
+
                 iou_preds = iou_preds[batch_idx, min_loss_idx]  # [B*M]
-                
+
             else:
                 best_masks = masks.squeeze(1)
                 iou_preds = iou_preds.squeeze(1)
             loss_mask = loss_mask.mean()
-            
+
             iou = compute_iou_original(best_masks, gt_masks)  # [B*M]
-            
+
             if self.use_soft_iou:
                 with torch.no_grad():
-                    soft_iou = compute_jaccard(
-                        best_masks, gt_masks.to(dtype=best_masks.dtype)
-                    )
+                    soft_iou = compute_jaccard(best_masks, gt_masks.to(dtype=best_masks.dtype))
                 loss_iou = F.mse_loss(soft_iou, iou_preds)
             else:
                 loss_iou = F.mse_loss(iou, iou_preds)
 
             losses.append(loss_iou * self.iou_loss_weight + loss_mask)
             losses.append(loss_mask)
-                
-            aux_outputs.append(
-                dict(
-                    iou=iou,
-                    best_masks=best_masks,
-                    loss_mask=loss_mask,
-                    loss_iou=loss_iou
-                )
-            )
 
-        triplets = outputs[0]['triplets']
+            aux_outputs.append(dict(iou=iou, best_masks=best_masks, loss_mask=loss_mask, loss_iou=loss_iou))
+
+        triplets = outputs[0]["triplets"]
         if triplets is not None:
-            contrastLoss,_ = contrast_loss(triplets)
-            losses.append(contrastLoss*0.1)
-            aux_outputs.append(
-                    dict(
-                        contrastLoss = contrastLoss
-                    )
-                )
+            contrastLoss, _ = contrast_loss(triplets)
+            losses.append(contrastLoss * 0.1)
+            aux_outputs.append(dict(contrastLoss=contrastLoss))
 
         loss = torch.stack(losses).mean()
         return loss, aux_outputs

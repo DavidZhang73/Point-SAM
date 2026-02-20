@@ -10,19 +10,20 @@ Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
 Please cite our work if the code is helpful to you.
 """
 
-import random
-import numbers
-import scipy
-import scipy.ndimage
-import scipy.interpolate
-import scipy.stats
-import numpy as np
-import torch
 import copy
-from collections.abc import Sequence, Mapping
-import pdb
+import numbers
+import random
+from collections.abc import Mapping, Sequence
 
-class Collect(object):
+import numpy as np
+import scipy
+import scipy.interpolate
+import scipy.ndimage
+import scipy.stats
+import torch
+
+
+class Collect:
     def __init__(self, keys, offset_keys_dict=None, **kwargs):
         """
         e.g. Collect(keys=[coord], feat_keys=[coord, color])
@@ -48,7 +49,7 @@ class Collect(object):
         return data
 
 
-class Copy(object):
+class Copy:
     def __init__(self, keys_dict=None):
         if keys_dict is None:
             keys_dict = dict(coord="origin_coord", segment="origin_segment")
@@ -65,7 +66,7 @@ class Copy(object):
         return data_dict
 
 
-class ToTensor(object):
+class ToTensor:
     def __call__(self, data):
         if isinstance(data, torch.Tensor):
             return data
@@ -92,7 +93,7 @@ class ToTensor(object):
             raise TypeError(f"type {type(data)} cannot be converted to tensor.")
 
 
-class Add(object):
+class Add:
     def __init__(self, keys_dict=None):
         if keys_dict is None:
             keys_dict = dict()
@@ -104,14 +105,14 @@ class Add(object):
         return data_dict
 
 
-class NormalizeColor(object):
+class NormalizeColor:
     def __call__(self, data_dict):
         if "color" in data_dict.keys():
             data_dict["color"] = data_dict["color"] / 255
         return data_dict
 
 
-class NormalizeCoord(object):
+class NormalizeCoord:
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
             # modified from pointnet2
@@ -121,10 +122,10 @@ class NormalizeCoord(object):
             data_dict["coord"] = data_dict["coord"] / m
         return data_dict
 
-class NormalizeMy(object):
+
+class NormalizeMy:
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
-            
             coord = data_dict["coord"]
             bbmin, bbmax = coord.min(0), coord.max(0)
             center, scale = (bbmin + bbmax) * 0.5, 2.0 * 0.9 / (bbmax - bbmin).max()
@@ -134,7 +135,7 @@ class NormalizeMy(object):
         return data_dict
 
 
-class PositiveShift(object):
+class PositiveShift:
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
             coord_min = np.min(data_dict["coord"], 0)
@@ -142,8 +143,7 @@ class PositiveShift(object):
         return data_dict
 
 
-
-class CenterShift(object):
+class CenterShift:
     def __init__(self, apply_z=True):
         self.apply_z = apply_z
 
@@ -161,7 +161,7 @@ class CenterShift(object):
         return data_dict
 
 
-class RandomShift(object):
+class RandomShift:
     def __init__(self, shift=((-0.2, 0.2), (-0.2, 0.2), (0, 0))):
         self.shift = shift
 
@@ -174,8 +174,7 @@ class RandomShift(object):
         return data_dict
 
 
-
-class PointClip(object):
+class PointClip:
     def __init__(self, point_cloud_range=(-80, -80, -3, 80, 80, 1)):
         self.point_cloud_range = point_cloud_range
 
@@ -189,7 +188,7 @@ class PointClip(object):
         return data_dict
 
 
-class RandomDropout(object):
+class RandomDropout:
     def __init__(self, dropout_ratio=0.2, dropout_application_ratio=0.5):
         """
         upright_axis: axis index among x,y,z, i.e. 2 for z
@@ -222,11 +221,11 @@ class RandomDropout(object):
             if "point2face" in data_dict.keys():
                 data_dict["point2face"] = data_dict["point2face"][idx]
             if "mask2pt" in data_dict.keys():
-                data_dict["mask2pt"] = data_dict["mask2pt"][:,idx] # axis1 is points
+                data_dict["mask2pt"] = data_dict["mask2pt"][:, idx]  # axis1 is points
         return data_dict
 
 
-class RandomRotate(object):
+class RandomRotate:
     def __init__(self, angle=None, center=None, axis="z", always_apply=False, p=0.5):
         self.angle = [-1, 1] if angle is None else angle
         self.axis = axis
@@ -268,10 +267,8 @@ class RandomRotate(object):
         return data_dict
 
 
-class RandomRotateTargetAngle(object):
-    def __init__(
-        self, angle=(1 / 2, 1, 3 / 2), center=None, axis="z", always_apply=False, p=0.75
-    ):
+class RandomRotateTargetAngle:
+    def __init__(self, angle=(1 / 2, 1, 3 / 2), center=None, axis="z", always_apply=False, p=0.75):
         self.angle = angle
         self.axis = axis
         self.always_apply = always_apply
@@ -306,22 +303,20 @@ class RandomRotateTargetAngle(object):
         return data_dict
 
 
-class RandomScale(object):
+class RandomScale:
     def __init__(self, scale=None, anisotropic=False):
         self.scale = scale if scale is not None else [0.95, 1.05]
         self.anisotropic = anisotropic
 
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
-            scale = np.random.uniform(
-                self.scale[0], self.scale[1], 3 if self.anisotropic else 1
-            )
+            scale = np.random.uniform(self.scale[0], self.scale[1], 3 if self.anisotropic else 1)
             data_dict["coord"] *= scale
             data_dict["vertices"] *= scale
         return data_dict
 
 
-class RandomFlip(object):
+class RandomFlip:
     def __init__(self, p=0.5):
         self.p = p
 
@@ -343,7 +338,7 @@ class RandomFlip(object):
         return data_dict
 
 
-class RandomJitter(object):
+class RandomJitter:
     def __init__(self, sigma=0.01, clip=0.05):
         assert clip > 0
         self.sigma = sigma
@@ -360,7 +355,7 @@ class RandomJitter(object):
         return data_dict
 
 
-class ClipGaussianJitter(object):
+class ClipGaussianJitter:
     def __init__(self, scalar=0.02, store_jitter=False):
         self.scalar = scalar
         self.mean = np.mean(3)
@@ -370,9 +365,7 @@ class ClipGaussianJitter(object):
 
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
-            jitter = np.random.multivariate_normal(
-                self.mean, self.cov, data_dict["coord"].shape[0]
-            )
+            jitter = np.random.multivariate_normal(self.mean, self.cov, data_dict["coord"].shape[0])
             jitter = self.scalar * np.clip(jitter / 1.96, -1, 1)
             data_dict["coord"] += jitter
             if self.store_jitter:
@@ -380,7 +373,7 @@ class ClipGaussianJitter(object):
         return data_dict
 
 
-class ChromaticAutoContrast(object):
+class ChromaticAutoContrast:
     def __init__(self, p=0.2, blend_factor=None):
         self.p = p
         self.blend_factor = blend_factor
@@ -389,19 +382,14 @@ class ChromaticAutoContrast(object):
         if "color" in data_dict.keys() and np.random.rand() < self.p:
             lo = np.min(data_dict["color"], 0, keepdims=True)
             hi = np.max(data_dict["color"], 0, keepdims=True)
-            scale = 255 / (hi - lo+1e-12)
+            scale = 255 / (hi - lo + 1e-12)
             contrast_feat = (data_dict["color"][:, :3] - lo) * scale
-            blend_factor = (
-                np.random.rand() if self.blend_factor is None else self.blend_factor
-            )
-            data_dict["color"][:, :3] = (1 - blend_factor) * data_dict["color"][
-                :, :3
-            ] + blend_factor * contrast_feat
+            blend_factor = np.random.rand() if self.blend_factor is None else self.blend_factor
+            data_dict["color"][:, :3] = (1 - blend_factor) * data_dict["color"][:, :3] + blend_factor * contrast_feat
         return data_dict
 
 
-
-class ChromaticTranslation(object):
+class ChromaticTranslation:
     def __init__(self, p=0.95, ratio=0.05):
         self.p = p
         self.ratio = ratio
@@ -413,7 +401,7 @@ class ChromaticTranslation(object):
         return data_dict
 
 
-class ChromaticJitter(object):
+class ChromaticJitter:
     def __init__(self, p=0.95, std=0.005):
         self.p = p
         self.std = std
@@ -422,24 +410,18 @@ class ChromaticJitter(object):
         if "color" in data_dict.keys() and np.random.rand() < self.p:
             noise = np.random.randn(data_dict["color"].shape[0], 3)
             noise *= self.std * 255
-            data_dict["color"][:, :3] = np.clip(
-                noise + data_dict["color"][:, :3], 0, 255
-            )
+            data_dict["color"][:, :3] = np.clip(noise + data_dict["color"][:, :3], 0, 255)
         return data_dict
 
 
-class RandomColorGrayScale(object):
+class RandomColorGrayScale:
     def __init__(self, p):
         self.p = p
 
     @staticmethod
     def rgb_to_grayscale(color, num_output_channels=1):
         if color.shape[-1] < 3:
-            raise TypeError(
-                "Input color should have at least 3 dimensions, but found {}".format(
-                    color.shape[-1]
-                )
-            )
+            raise TypeError(f"Input color should have at least 3 dimensions, but found {color.shape[-1]}")
 
         if num_output_channels not in (1, 3):
             raise ValueError("num_output_channels should be either 1 or 3")
@@ -459,7 +441,7 @@ class RandomColorGrayScale(object):
         return data_dict
 
 
-class RandomColorJitter(object):
+class RandomColorJitter:
     """
     Random Color Jitter for 3D point cloud (refer torchvision)
     """
@@ -468,32 +450,22 @@ class RandomColorJitter(object):
         self.brightness = self._check_input(brightness, "brightness")
         self.contrast = self._check_input(contrast, "contrast")
         self.saturation = self._check_input(saturation, "saturation")
-        self.hue = self._check_input(
-            hue, "hue", center=0, bound=(-0.5, 0.5), clip_first_on_zero=False
-        )
+        self.hue = self._check_input(hue, "hue", center=0, bound=(-0.5, 0.5), clip_first_on_zero=False)
         self.p = p
 
     @staticmethod
-    def _check_input(
-        value, name, center=1, bound=(0, float("inf")), clip_first_on_zero=True
-    ):
+    def _check_input(value, name, center=1, bound=(0, float("inf")), clip_first_on_zero=True):
         if isinstance(value, numbers.Number):
             if value < 0:
-                raise ValueError(
-                    "If {} is a single number, it must be non negative.".format(name)
-                )
+                raise ValueError(f"If {name} is a single number, it must be non negative.")
             value = [center - float(value), center + float(value)]
             if clip_first_on_zero:
                 value[0] = max(value[0], 0.0)
         elif isinstance(value, (tuple, list)) and len(value) == 2:
             if not bound[0] <= value[0] <= value[1] <= bound[1]:
-                raise ValueError("{} values should be between {}".format(name, bound))
+                raise ValueError(f"{name} values should be between {bound}")
         else:
-            raise TypeError(
-                "{} should be a single number or a list/tuple with length 2.".format(
-                    name
-                )
-            )
+            raise TypeError(f"{name} should be a single number or a list/tuple with length 2.")
 
         # if value is 0 or (1., 1.) for brightness/contrast/saturation
         # or (0., 0.) for hue, do nothing
@@ -505,11 +477,7 @@ class RandomColorJitter(object):
     def blend(color1, color2, ratio):
         ratio = float(ratio)
         bound = 255.0
-        return (
-            (ratio * color1 + (1.0 - ratio) * color2)
-            .clip(0, bound)
-            .astype(color1.dtype)
-        )
+        return (ratio * color1 + (1.0 - ratio) * color2).clip(0, bound).astype(color1.dtype)
 
     @staticmethod
     def rgb2hsv(rgb):
@@ -553,33 +521,25 @@ class RandomColorJitter(object):
 
     def adjust_brightness(self, color, brightness_factor):
         if brightness_factor < 0:
-            raise ValueError(
-                "brightness_factor ({}) is not non-negative.".format(brightness_factor)
-            )
+            raise ValueError(f"brightness_factor ({brightness_factor}) is not non-negative.")
 
         return self.blend(color, np.zeros_like(color), brightness_factor)
 
     def adjust_contrast(self, color, contrast_factor):
         if contrast_factor < 0:
-            raise ValueError(
-                "contrast_factor ({}) is not non-negative.".format(contrast_factor)
-            )
+            raise ValueError(f"contrast_factor ({contrast_factor}) is not non-negative.")
         mean = np.mean(RandomColorGrayScale.rgb_to_grayscale(color))
         return self.blend(color, mean, contrast_factor)
 
     def adjust_saturation(self, color, saturation_factor):
         if saturation_factor < 0:
-            raise ValueError(
-                "saturation_factor ({}) is not non-negative.".format(saturation_factor)
-            )
+            raise ValueError(f"saturation_factor ({saturation_factor}) is not non-negative.")
         gray = RandomColorGrayScale.rgb_to_grayscale(color)
         return self.blend(color, gray, saturation_factor)
 
     def adjust_hue(self, color, hue_factor):
         if not (-0.5 <= hue_factor <= 0.5):
-            raise ValueError(
-                "hue_factor ({}) is not in [-0.5, 0.5].".format(hue_factor)
-            )
+            raise ValueError(f"hue_factor ({hue_factor}) is not in [-0.5, 0.5].")
         orig_dtype = color.dtype
         hsv = self.rgb2hsv(color / 255.0)
         h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
@@ -591,17 +551,9 @@ class RandomColorJitter(object):
     @staticmethod
     def get_params(brightness, contrast, saturation, hue):
         fn_idx = torch.randperm(4)
-        b = (
-            None
-            if brightness is None
-            else np.random.uniform(brightness[0], brightness[1])
-        )
+        b = None if brightness is None else np.random.uniform(brightness[0], brightness[1])
         c = None if contrast is None else np.random.uniform(contrast[0], contrast[1])
-        s = (
-            None
-            if saturation is None
-            else np.random.uniform(saturation[0], saturation[1])
-        )
+        s = None if saturation is None else np.random.uniform(saturation[0], saturation[1])
         h = None if hue is None else np.random.uniform(hue[0], hue[1])
         return fn_idx, b, c, s, h
 
@@ -615,34 +567,18 @@ class RandomColorJitter(object):
         ) = self.get_params(self.brightness, self.contrast, self.saturation, self.hue)
 
         for fn_id in fn_idx:
-            if (
-                fn_id == 0
-                and brightness_factor is not None
-                and np.random.rand() < self.p
-            ):
-                data_dict["color"] = self.adjust_brightness(
-                    data_dict["color"], brightness_factor
-                )
-            elif (
-                fn_id == 1 and contrast_factor is not None and np.random.rand() < self.p
-            ):
-                data_dict["color"] = self.adjust_contrast(
-                    data_dict["color"], contrast_factor
-                )
-            elif (
-                fn_id == 2
-                and saturation_factor is not None
-                and np.random.rand() < self.p
-            ):
-                data_dict["color"] = self.adjust_saturation(
-                    data_dict["color"], saturation_factor
-                )
+            if fn_id == 0 and brightness_factor is not None and np.random.rand() < self.p:
+                data_dict["color"] = self.adjust_brightness(data_dict["color"], brightness_factor)
+            elif fn_id == 1 and contrast_factor is not None and np.random.rand() < self.p:
+                data_dict["color"] = self.adjust_contrast(data_dict["color"], contrast_factor)
+            elif fn_id == 2 and saturation_factor is not None and np.random.rand() < self.p:
+                data_dict["color"] = self.adjust_saturation(data_dict["color"], saturation_factor)
             elif fn_id == 3 and hue_factor is not None and np.random.rand() < self.p:
                 data_dict["color"] = self.adjust_hue(data_dict["color"], hue_factor)
         return data_dict
 
 
-class HueSaturationTranslation(object):
+class HueSaturationTranslation:
     @staticmethod
     def rgb_to_hsv(rgb):
         # Translated from source of colorsys.rgb_to_hsv
@@ -664,9 +600,7 @@ class HueSaturationTranslation(object):
         rc[mask] = (maxc - r)[mask] / (maxc - minc)[mask]
         gc[mask] = (maxc - g)[mask] / (maxc - minc)[mask]
         bc[mask] = (maxc - b)[mask] / (maxc - minc)[mask]
-        hsv[..., 0] = np.select(
-            [r == maxc, g == maxc], [bc - gc, 2.0 + rc - bc], default=4.0 + gc - rc
-        )
+        hsv[..., 0] = np.select([r == maxc, g == maxc], [bc - gc, 2.0 + rc - bc], default=4.0 + gc - rc)
         hsv[..., 0] = (hsv[..., 0] / 6.0) % 1.0
         return hsv
 
@@ -703,13 +637,11 @@ class HueSaturationTranslation(object):
             sat_ratio = 1 + (np.random.rand() - 0.5) * 2 * self.saturation_max
             hsv[..., 0] = np.remainder(hue_val + hsv[..., 0] + 1, 1)
             hsv[..., 1] = np.clip(sat_ratio * hsv[..., 1], 0, 1)
-            data_dict["color"][:, :3] = np.clip(
-                HueSaturationTranslation.hsv_to_rgb(hsv), 0, 255
-            )
+            data_dict["color"][:, :3] = np.clip(HueSaturationTranslation.hsv_to_rgb(hsv), 0, 255)
         return data_dict
 
 
-class RandomColorDrop(object):
+class RandomColorDrop:
     def __init__(self, p=0.2, color_augment=0.0):
         self.p = p
         self.color_augment = color_augment
@@ -720,17 +652,12 @@ class RandomColorDrop(object):
         return data_dict
 
     def __repr__(self):
-        return "RandomColorDrop(color_augment: {}, p: {})".format(
-            self.color_augment, self.p
-        )
+        return f"RandomColorDrop(color_augment: {self.color_augment}, p: {self.p})"
 
 
-
-class ElasticDistortion(object):
+class ElasticDistortion:
     def __init__(self, distortion_params=None):
-        self.distortion_params = (
-            [[0.2, 0.4], [0.8, 1.6]] if distortion_params is None else distortion_params
-        )
+        self.distortion_params = [[0.2, 0.4], [0.8, 1.6]] if distortion_params is None else distortion_params
 
     @staticmethod
     def elastic_distortion(coords, granularity, magnitude):
@@ -751,15 +678,9 @@ class ElasticDistortion(object):
 
         # Smoothing.
         for _ in range(2):
-            noise = scipy.ndimage.filters.convolve(
-                noise, blurx, mode="constant", cval=0
-            )
-            noise = scipy.ndimage.filters.convolve(
-                noise, blury, mode="constant", cval=0
-            )
-            noise = scipy.ndimage.filters.convolve(
-                noise, blurz, mode="constant", cval=0
-            )
+            noise = scipy.ndimage.filters.convolve(noise, blurx, mode="constant", cval=0)
+            noise = scipy.ndimage.filters.convolve(noise, blury, mode="constant", cval=0)
+            noise = scipy.ndimage.filters.convolve(noise, blurz, mode="constant", cval=0)
 
         # Trilinear interpolate noise filters for each spatial dimensions.
         ax = [
@@ -770,9 +691,7 @@ class ElasticDistortion(object):
                 noise_dim,
             )
         ]
-        interp = scipy.interpolate.RegularGridInterpolator(
-            ax, noise, bounds_error=False, fill_value=0
-        )
+        interp = scipy.interpolate.RegularGridInterpolator(ax, noise, bounds_error=False, fill_value=0)
         coords += interp(coords) * magnitude
         return coords
 
@@ -780,13 +699,11 @@ class ElasticDistortion(object):
         if "coord" in data_dict.keys() and self.distortion_params is not None:
             if random.random() < 0.95:
                 for granularity, magnitude in self.distortion_params:
-                    data_dict["coord"] = self.elastic_distortion(
-                        data_dict["coord"], granularity, magnitude
-                    )
+                    data_dict["coord"] = self.elastic_distortion(data_dict["coord"], granularity, magnitude)
         return data_dict
 
 
-class GridSample(object):
+class GridSample:
     def __init__(
         self,
         grid_size=0.05,
@@ -823,16 +740,11 @@ class GridSample(object):
         key_sort = key[idx_sort]
         _, inverse, count = np.unique(key_sort, return_inverse=True, return_counts=True)
         if self.mode == "train":  # train mode
-            idx_select = (
-                np.cumsum(np.insert(count, 0, 0)[0:-1])
-                + np.random.randint(0, count.max(), count.size) % count
-            )
+            idx_select = np.cumsum(np.insert(count, 0, 0)[0:-1]) + np.random.randint(0, count.max(), count.size) % count
             idx_unique = idx_sort[idx_select]
             if "sampled_index" in data_dict:
                 # for ScanNet data efficient, we need to make sure labeled point is sampled.
-                idx_unique = np.unique(
-                    np.append(idx_unique, data_dict["sampled_index"])
-                )
+                idx_unique = np.unique(np.append(idx_unique, data_dict["sampled_index"]))
                 mask = np.zeros_like(data_dict["segment"]).astype(bool)
                 mask[data_dict["sampled_index"]] = True
                 data_dict["sampled_index"] = np.where(mask[idx_unique])[0]
@@ -844,23 +756,19 @@ class GridSample(object):
             if self.return_min_coord:
                 data_dict["min_coord"] = min_coord.reshape([1, 3])
             if self.return_displacement:
-                displacement = (
-                    scaled_coord - grid_coord - 0.5
-                )  # [0, 1] -> [-0.5, 0.5] displacement to center
+                displacement = scaled_coord - grid_coord - 0.5  # [0, 1] -> [-0.5, 0.5] displacement to center
                 if self.project_displacement:
-                    displacement = np.sum(
-                        displacement * data_dict["normal"], axis=-1, keepdims=True
-                    )
+                    displacement = np.sum(displacement * data_dict["normal"], axis=-1, keepdims=True)
                 data_dict["displacement"] = displacement[idx_unique]
             for key in self.keys:
                 data_dict[key] = data_dict[key][idx_unique]
             if "point2face" in data_dict.keys():
                 data_dict["point2face"] = data_dict["point2face"][idx_unique]
             if "mask2pt" in data_dict.keys():
-                data_dict["mask2pt"] = data_dict["mask2pt"][:,idx_unique] # axis1 is points
+                data_dict["mask2pt"] = data_dict["mask2pt"][:, idx_unique]  # axis1 is points
             if "gt" in data_dict.keys():
                 data_dict["gt"] = data_dict["gt"][idx_unique]
-            #data_dict["gridsample_idxs"] = idx_unique
+            # data_dict["gridsample_idxs"] = idx_unique
             return data_dict
 
         elif self.mode == "test":  # test mode
@@ -877,13 +785,9 @@ class GridSample(object):
                 if self.return_min_coord:
                     data_part["min_coord"] = min_coord.reshape([1, 3])
                 if self.return_displacement:
-                    displacement = (
-                        scaled_coord - grid_coord - 0.5
-                    )  # [0, 1] -> [-0.5, 0.5] displacement to center
+                    displacement = scaled_coord - grid_coord - 0.5  # [0, 1] -> [-0.5, 0.5] displacement to center
                     if self.project_displacement:
-                        displacement = np.sum(
-                            displacement * data_dict["normal"], axis=-1, keepdims=True
-                        )
+                        displacement = np.sum(displacement * data_dict["normal"], axis=-1, keepdims=True)
                     data_dict["displacement"] = displacement[idx_part]
                 for key in data_dict.keys():
                     if key in self.keys:
@@ -891,10 +795,10 @@ class GridSample(object):
                     elif "point2face" in data_dict.keys():
                         data_part["point2face"] = data_dict["point2face"][idx_part]
                     elif "mask2pt" in data_dict.keys():
-                        data_part["mask2pt"] = data_dict["mask2pt"][:,idx_part] # axis1 is points
+                        data_part["mask2pt"] = data_dict["mask2pt"][:, idx_part]  # axis1 is points
                     else:
                         data_part[key] = data_dict[key]
-                    
+
                 data_part_list.append(data_part)
             return data_part_list
         else:
@@ -928,9 +832,7 @@ class GridSample(object):
         # Floor first for negative coordinates
         arr = arr.copy()
         arr = arr.astype(np.uint64, copy=False)
-        hashed_arr = np.uint64(14695981039346656037) * np.ones(
-            arr.shape[0], dtype=np.uint64
-        )
+        hashed_arr = np.uint64(14695981039346656037) * np.ones(arr.shape[0], dtype=np.uint64)
         for j in range(arr.shape[1]):
             hashed_arr *= np.uint64(1099511628211)
             hashed_arr = np.bitwise_xor(hashed_arr, arr[:, j])
@@ -938,7 +840,7 @@ class GridSample(object):
 
 
 # for now don't worry about this bc it makes the mask2pt unaligned
-class SphereCrop(object):
+class SphereCrop:
     def __init__(self, point_max=80000, sample_rate=None, mode="random"):
         self.point_max = point_max
         self.sample_rate = sample_rate
@@ -947,9 +849,7 @@ class SphereCrop(object):
 
     def __call__(self, data_dict):
         point_max = (
-            int(self.sample_rate * data_dict["coord"].shape[0])
-            if self.sample_rate is not None
-            else self.point_max
+            int(self.sample_rate * data_dict["coord"].shape[0]) if self.sample_rate is not None else self.point_max
         )
 
         assert "coord" in data_dict.keys()
@@ -960,9 +860,7 @@ class SphereCrop(object):
             data_part_list = []
             # coord_list, color_list, dist2_list, idx_list, offset_list = [], [], [], [], []
             if data_dict["coord"].shape[0] > point_max:
-                coord_p, idx_uni = np.random.rand(
-                    data_dict["coord"].shape[0]
-                ) * 1e-3, np.array([])
+                coord_p, idx_uni = np.random.rand(data_dict["coord"].shape[0]) * 1e-3, np.array([])
                 while idx_uni.size != data_dict["index"].shape[0]:
                     init_idx = np.argmin(coord_p)
                     dist2 = np.sum(
@@ -981,22 +879,16 @@ class SphereCrop(object):
                     if "color" in data_dict.keys():
                         data_crop_dict["color"] = data_dict["color"][idx_crop]
                     if "displacement" in data_dict.keys():
-                        data_crop_dict["displacement"] = data_dict["displacement"][
-                            idx_crop
-                        ]
+                        data_crop_dict["displacement"] = data_dict["displacement"][idx_crop]
                     if "strength" in data_dict.keys():
                         data_crop_dict["strength"] = data_dict["strength"][idx_crop]
                     data_crop_dict["weight"] = dist2[idx_crop]
                     data_crop_dict["index"] = data_dict["index"][idx_crop]
                     data_part_list.append(data_crop_dict)
 
-                    delta = np.square(
-                        1 - data_crop_dict["weight"] / np.max(data_crop_dict["weight"])
-                    )
+                    delta = np.square(1 - data_crop_dict["weight"] / np.max(data_crop_dict["weight"]))
                     coord_p[idx_crop] += delta
-                    idx_uni = np.unique(
-                        np.concatenate((idx_uni, data_crop_dict["index"]))
-                    )
+                    idx_uni = np.unique(np.concatenate((idx_uni, data_crop_dict["index"])))
             else:
                 data_crop_dict = data_dict.copy()
                 data_crop_dict["weight"] = np.zeros(data_dict["coord"].shape[0])
@@ -1006,16 +898,12 @@ class SphereCrop(object):
         # mode is "random" or "center"
         elif data_dict["coord"].shape[0] > point_max:
             if self.mode == "random":
-                center = data_dict["coord"][
-                    np.random.randint(data_dict["coord"].shape[0])
-                ]
+                center = data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
             elif self.mode == "center":
                 center = data_dict["coord"][data_dict["coord"].shape[0] // 2]
             else:
                 raise NotImplementedError
-            idx_crop = np.argsort(np.sum(np.square(data_dict["coord"] - center), 1))[
-                :point_max
-            ]
+            idx_crop = np.argsort(np.sum(np.square(data_dict["coord"] - center), 1))[:point_max]
             if "coord" in data_dict.keys():
                 data_dict["coord"] = data_dict["coord"][idx_crop]
             if "origin_coord" in data_dict.keys():
@@ -1037,11 +925,11 @@ class SphereCrop(object):
             if "point2face" in data_dict.keys():
                 data_dict["point2face"] = data_dict["point2face"][idx_crop]
             if "mask2pt" in data_dict.keys():
-                data_dict["mask2pt"] = data_dict["mask2pt"][:,idx_crop] # axis1 is points
+                data_dict["mask2pt"] = data_dict["mask2pt"][:, idx_crop]  # axis1 is points
         return data_dict
 
 
-class ShufflePoint(object):
+class ShufflePoint:
     def __call__(self, data_dict):
         assert "coord" in data_dict.keys()
         shuffle_index = np.arange(data_dict["coord"].shape[0])
@@ -1063,7 +951,7 @@ class ShufflePoint(object):
         return data_dict
 
 
-class CropBoundary(object):
+class CropBoundary:
     def __call__(self, data_dict):
         assert "segment" in data_dict
         segment = data_dict["segment"].flatten()
@@ -1083,7 +971,7 @@ class CropBoundary(object):
         return data_dict
 
 
-class ContrastiveViewsGenerator(object):
+class ContrastiveViewsGenerator:
     def __init__(
         self,
         view_keys=("coord", "color", "normal", "origin_coord"),
@@ -1107,7 +995,7 @@ class ContrastiveViewsGenerator(object):
         return data_dict
 
 
-class InstanceParser(object):
+class InstanceParser:
     def __init__(self, segment_ignore_index=(-1, 0, 1), instance_ignore_index=-1):
         self.segment_ignore_index = segment_ignore_index
         self.instance_ignore_index = instance_ignore_index
@@ -1126,9 +1014,7 @@ class InstanceParser(object):
         # init instance information
         centroid = np.ones((coord.shape[0], 3)) * self.instance_ignore_index
         bbox = np.ones((instance_num, 8)) * self.instance_ignore_index
-        vacancy = [
-            index for index in self.segment_ignore_index if index >= 0
-        ]  # vacate class index
+        vacancy = [index for index in self.segment_ignore_index if index >= 0]  # vacate class index
 
         for instance_id in range(instance_num):
             mask_ = instance == instance_id
@@ -1144,9 +1030,7 @@ class InstanceParser(object):
             bbox_class -= np.greater(bbox_class, vacancy).sum()
 
             centroid[mask_] = bbox_centroid
-            bbox[instance_id] = np.concatenate(
-                [bbox_center, bbox_size, bbox_theta, bbox_class]
-            )  # 3 + 3 + 1 + 1 = 8
+            bbox[instance_id] = np.concatenate([bbox_center, bbox_size, bbox_theta, bbox_class])  # 3 + 3 + 1 + 1 = 8
         data_dict["instance"] = instance
         data_dict["instance_centroid"] = centroid
         data_dict["bbox"] = bbox

@@ -2,23 +2,16 @@ import sys
 
 sys.path.append(".")
 
-import os
-import argparse
-import hydra
-from omegaconf import OmegaConf
-import matplotlib.colors as mcolors
-import pointops
-import torch
-import numpy as np
-import trimesh
-import gc
-import time
-from collections import defaultdict,Counter, deque
-from tqdm import tqdm
-import networkx as nx
-import igraph
 import multiprocessing as mp
+from collections import Counter, defaultdict, deque
 
+import igraph
+import matplotlib.colors as mcolors
+import networkx as nx
+import numpy as np
+import torch
+import trimesh
+from tqdm import tqdm
 
 
 def construct_mesh_graph(mesh):
@@ -27,7 +20,7 @@ def construct_mesh_graph(mesh):
     for face1, face2 in mesh_edges:
         mesh_graph[face1].add(face2)
         mesh_graph[face2].add(face1)
-    
+
     visited = set()
     components = []
     for face in mesh_graph.keys():
@@ -41,19 +34,19 @@ def construct_mesh_graph(mesh):
                     component.add(current)
                     queue.extend(n for n in mesh_graph[current] if n not in visited)
             components.append(component)
-    
+
     if len(components) > 1:
         for i in range(len(components) - 1):
             face_a = min(components[i])
-            face_b = min(components[i+1])
+            face_b = min(components[i + 1])
             mesh_graph[face_a].add(face_b)
             mesh_graph[face_b].add(face_a)
-    
+
     return mesh_graph
 
+
 def label_components(face2label, mesh, mesh_graph):
-    """
-    """
+    """ """
     components = []
     visited = set()
 
@@ -61,7 +54,7 @@ def label_components(face2label, mesh, mesh_graph):
         stack = [source]
         components.append({source})
         visited.add(source)
-        
+
         while stack:
             node = stack.pop()
             for adj in mesh_graph[node]:
@@ -75,24 +68,22 @@ def label_components(face2label, mesh, mesh_graph):
             dfs(face)
     return components
 
-def smooth(face2label_consistent,mesh,mesh_graph,components,cfg):
-    """
-    """
+
+def smooth(face2label_consistent, mesh, mesh_graph, components, cfg):
+    """ """
     # remove holes
 
     threshold_percentage_size = cfg.threshold_percentage_size
     threshold_percentage_area = cfg.threshold_percentage_area
     components = sorted(components, key=lambda x: len(x), reverse=True)
-    components_area = [
-        sum([float(mesh.area_faces[face]) for face in comp]) for comp in components
-    ]
+    components_area = [sum([float(mesh.area_faces[face]) for face in comp]) for comp in components]
     max_size = max([len(comp) for comp in components])
     max_area = max(components_area)
 
     remove_comp_size = set()
     remove_comp_area = set()
     for i, comp in enumerate(components):
-        if len(comp)          < max_size * threshold_percentage_size:
+        if len(comp) < max_size * threshold_percentage_size:
             remove_comp_size.add(i)
         if components_area[i] < max_area * threshold_percentage_area:
             remove_comp_area.add(i)
@@ -101,7 +92,7 @@ def smooth(face2label_consistent,mesh,mesh_graph,components,cfg):
     for i in remove_comp:
         for face in components[i]:
             face2label_consistent.pop(face)
-    
+
     # fill islands
     # print('Smoothing labels')
     smooth_iterations = 16
@@ -128,8 +119,7 @@ def smooth(face2label_consistent,mesh,mesh_graph,components,cfg):
 
 
 def split(face2label_consistent, components):
-    """
-    """
+    """ """
 
     labels_seen = set()
     labels_curr = max(face2label_consistent.values()) + 1
@@ -138,7 +128,7 @@ def split(face2label_consistent, components):
         face = comp.pop()
         label = face2label_consistent[face]
         comp.add(face)
-        if label == 0 or label in labels_seen: # background or repeated label
+        if label == 0 or label in labels_seen:  # background or repeated label
             face2label_consistent.update({face: labels_curr for face in comp})
             labels_curr += 1
         labels_seen.add(label)
@@ -146,18 +136,12 @@ def split(face2label_consistent, components):
 
     return face2label_consistent
 
-def construct_expansion_graph(
-    label,
-    mesh,
-    partition,
-    cost_data,
-    cost_smoothness
-) -> nx.Graph:
-    """
-    """
-    G = nx.Graph() # undirected graph
-    A = 'alpha'
-    B = 'alpha_complement'
+
+def construct_expansion_graph(label, mesh, partition, cost_data, cost_smoothness) -> nx.Graph:
+    """ """
+    G = nx.Graph()  # undirected graph
+    A = "alpha"
+    B = "alpha_complement"
 
     node2index = {}
     G.add_node(A)
@@ -169,11 +153,11 @@ def construct_expansion_graph(
         node2index[i] = 2 + i
 
     aux_count = 0
-    for i, edge in enumerate(mesh.face_adjacency): # auxillary nodes
+    for i, edge in enumerate(mesh.face_adjacency):  # auxillary nodes
         f1, f2 = int(edge[0]), int(edge[1])
         if partition[f1] != partition[f2]:
             a = (f1, f2)
-            if a in node2index: # duplicate edge
+            if a in node2index:  # duplicate edge
                 continue
             G.add_node(a)
             node2index[a] = len(mesh.faces) + 2 + aux_count
@@ -181,7 +165,7 @@ def construct_expansion_graph(
 
     for f in range(len(mesh.faces)):
         G.add_edge(A, f, capacity=cost_data[f, label])
-        G.add_edge(B, f, capacity=float('inf') if partition[f] == label else cost_data[f, partition[f]])
+        G.add_edge(B, f, capacity=float("inf") if partition[f] == label else cost_data[f, partition[f]])
 
     for i, edge in enumerate(mesh.face_adjacency):
         f1, f2 = int(edge[0]), int(edge[1])
@@ -195,17 +179,12 @@ def construct_expansion_graph(
                 G.add_edge(f1, a, capacity=cost_smoothness[i])
             if partition[f2] != label:
                 G.add_edge(a, f2, capacity=cost_smoothness[i])
-    
+
     return G, node2index
 
-def partition_cost(
-    mesh,
-    partition,
-    cost_data,
-    cost_smoothness
-) -> float:
-    """
-    """
+
+def partition_cost(mesh, partition, cost_data, cost_smoothness) -> float:
+    """ """
     cost = 0
     for f in range(len(partition)):
         cost += cost_data[f, partition[f]]
@@ -215,6 +194,7 @@ def partition_cost(
             cost += cost_smoothness[i]
     return cost
 
+
 def repartition(
     mesh: trimesh.Trimesh,
     partition,
@@ -223,8 +203,8 @@ def repartition(
     smoothing_iterations,
     _lambda=1.0,
 ):
-    A = 'alpha'
-    B = 'alpha_complement'
+    A = "alpha"
+    B = "alpha_complement"
     labels = np.unique(partition)
 
     cost_smoothness = cost_smoothness * _lambda
@@ -236,41 +216,42 @@ def repartition(
     cost_min = partition_cost(mesh, partition, cost_data, cost_smoothness)
 
     for i in range(smoothing_iterations):
+        # print('Repartition iteration ', i)
 
-        #print('Repartition iteration ', i)
-        
         for label in tqdm(labels):
             G, node2index = construct_expansion_graph(label, mesh, partition, cost_data, cost_smoothness)
             index2node = {v: k for k, v in node2index.items()}
 
-            '''
+            """
             _, (S, T) = nx.minimum_cut(G, A, B)
             assert A in S and B in T
             S = np.array([v for v in S if isinstance(v, int)]).astype(int)
             T = np.array([v for v in T if isinstance(v, int)]).astype(int)
-            '''
+            """
 
             G = igraph.Graph.from_networkx(G)
-            outputs = G.st_mincut(source=node2index[A], target=node2index[B], capacity='capacity')
+            outputs = G.st_mincut(source=node2index[A], target=node2index[B], capacity="capacity")
             S = outputs.partition[0]
             T = outputs.partition[1]
             assert node2index[A] in S and node2index[B] in T
             S = np.array([index2node[v] for v in S if isinstance(index2node[v], int)]).astype(int)
             T = np.array([index2node[v] for v in T if isinstance(index2node[v], int)]).astype(int)
 
-            assert (partition[S] == label).sum() == 0 # T consists of those assigned 'alpha' and S 'alpha_complement' (see paper)
+            assert (
+                partition[S] == label
+            ).sum() == 0  # T consists of those assigned 'alpha' and S 'alpha_complement' (see paper)
             partition[T] = label
 
             cost = partition_cost(mesh, partition, cost_data, cost_smoothness)
             if cost > cost_min:
-                raise ValueError('Cost increased. This should not happen because the graph cut is optimal.')
+                raise ValueError("Cost increased. This should not happen because the graph cut is optimal.")
             cost_min = cost
-    
+
     return partition
 
+
 def smooth_repartition_faces(face2label_consistent: dict, target_labels=None, mesh=None) -> dict:
-    """
-    """
+    """ """
     tmesh = mesh
 
     partition = np.array([face2label_consistent[face] for face in range(len(tmesh.faces))])
@@ -281,42 +262,28 @@ def smooth_repartition_faces(face2label_consistent: dict, target_labels=None, me
         cost_data[:, label] = (partition != label).astype(np.float32)
     # print('Cost data shape: ', cost_data.shape)
     cost_smoothness = -np.log(tmesh.face_adjacency_angles / np.pi + 1e-20)
-    
+
     lambda_seed = 6
     if target_labels is None:
         refined_partition = repartition(tmesh, partition, cost_data, cost_smoothness, 1, lambda_seed)
-        return {
-            face: refined_partition[face] for face in range(len(tmesh.faces))
-        }
+        return {face: refined_partition[face] for face in range(len(tmesh.faces))}
 
-    lambda_range=(
-        1, 
-        15
-    )
+    lambda_range = (1, 15)
     lambdas = np.linspace(*lambda_range, num=mp.cpu_count())
-    chunks = [
-        (tmesh, partition, cost_data, cost_smoothness, 1, _lambda) 
-        for _lambda in lambdas
-    ]
+    chunks = [(tmesh, partition, cost_data, cost_smoothness, 1, _lambda) for _lambda in lambdas]
     with mp.Pool(mp.cpu_count() // 2) as pool:
         refined_partitions = pool.starmap(repartition, chunks)
 
     def compute_cur_labels(part, noise_threshold=10):
-        """
-        """
+        """ """
         values, counts = np.unique(part, return_counts=True)
         return values[counts > noise_threshold]
-
 
     max_iteration = 1
     cur_iteration = 0
     cur_lambda_index = np.searchsorted(lambdas, lambda_seed)
     cur_labels = len(compute_cur_labels(refined_partitions[cur_lambda_index]))
-    while not (
-        target_labels - 1 <= cur_labels and
-        target_labels + 1 >= cur_labels
-    ) and cur_iteration < max_iteration:
-        
+    while not (target_labels - 1 <= cur_labels and target_labels + 1 >= cur_labels) and cur_iteration < max_iteration:
         if cur_labels < target_labels and cur_lambda_index > 0:
             # want more labels so decrease lambda
             cur_lambda_index -= 1
@@ -328,21 +295,20 @@ def smooth_repartition_faces(face2label_consistent: dict, target_labels=None, me
         cur_iteration += 1
 
     # print('Repartitioned with ', cur_labels, ' labels aiming for ', target_labels, 'target labels using lambda ', lambdas[cur_lambda_index], ' in ', cur_iteration, ' iterations')
-    
+
     refined_partition = refined_partitions[cur_lambda_index]
-    return {
-        face: refined_partition[face] for face in range(len(tmesh.faces))
-    }
+    return {face: refined_partition[face] for face in range(len(tmesh.faces))}
+
 
 def nms(masks, scores, threshold=0.3):
-    
-    masks = masks.float() 
+
+    masks = masks.float()
     M = masks.shape[0]
 
-    intersection = masks @ masks.T        
-    areas = masks.sum(dim=1)               
-    union = areas.unsqueeze(1) + areas.unsqueeze(0) - intersection  
-    iou_matrix = intersection / (union + 1e-8)  
+    intersection = masks @ masks.T
+    areas = masks.sum(dim=1)
+    union = areas.unsqueeze(1) + areas.unsqueeze(0) - intersection
+    iou_matrix = intersection / (union + 1e-8)
 
     sorted_indices = torch.argsort(scores.squeeze(), descending=True)
     suppressed = torch.zeros(M, dtype=torch.bool)
@@ -354,11 +320,11 @@ def nms(masks, scores, threshold=0.3):
         current_idx = sorted_indices[i]
         keep.append(current_idx.item())
 
-        subsequent_indices = sorted_indices[i+1:]
+        subsequent_indices = sorted_indices[i + 1 :]
         if len(subsequent_indices) == 0:
             break
         ious = iou_matrix[current_idx, subsequent_indices]
-        to_suppress = (ious > threshold)   
+        to_suppress = ious > threshold
 
         suppress_positions = i + 1 + torch.nonzero(to_suppress).squeeze(1)
         if suppress_positions.numel() > 0:
@@ -366,15 +332,15 @@ def nms(masks, scores, threshold=0.3):
 
     return keep
 
+
 def sort_masks_by_area(masks):
 
-    areas = masks.sum(dim=1)     
-    
+    areas = masks.sum(dim=1)
+
     sorted_local_indices = torch.argsort(areas, descending=True).tolist()
     # print(f"sorted_local_indices: {sorted_local_indices}")
-    
+
     return masks[sorted_local_indices]
-    
 
 
 def post_processing(mesh_group, mesh, cfg):
@@ -382,17 +348,17 @@ def post_processing(mesh_group, mesh, cfg):
     label_dict = dict(zip(range(len(face_labels)), face_labels.tolist()))
 
     mesh_graph = construct_mesh_graph(mesh)
-    components = label_components(label_dict,mesh,mesh_graph)
-    label_smoothed = smooth(label_dict,mesh,mesh_graph,components,cfg)
+    components = label_components(label_dict, mesh, mesh_graph)
+    label_smoothed = smooth(label_dict, mesh, mesh_graph, components, cfg)
 
     for face in range(len(mesh.faces)):
         if face not in label_smoothed:
             label_smoothed[face] = 0
 
     face2label_consistent = label_smoothed
-    components = label_components(label_smoothed,mesh,mesh_graph)
+    components = label_components(label_smoothed, mesh, mesh_graph)
 
-    face2label_consistent = split(label_smoothed,components)
+    face2label_consistent = split(label_smoothed, components)
 
     if cfg.use_graph_cut:
         face2label_consistent = smooth_repartition_faces(face2label_consistent, None, mesh)
@@ -407,10 +373,14 @@ def post_processing(mesh_group, mesh, cfg):
 
     # Assign color to each face based on the label with most votes
     hex_colors = list(mcolors.CSS4_COLORS.values())
-    rgb_colors = np.array([mcolors.to_rgb(color) for color in hex_colors if color not in ['#000000', '#FFFFFF']])
+    rgb_colors = np.array([mcolors.to_rgb(color) for color in hex_colors if color not in ["#000000", "#FFFFFF"]])
+
     def relative_luminance(color):
         return 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]
-    rgb_colors = [color for color in rgb_colors if (relative_luminance(color) > 0.4 and relative_luminance(color) < 0.8)]
+
+    rgb_colors = [
+        color for color in rgb_colors if (relative_luminance(color) > 0.4 and relative_luminance(color) < 0.8)
+    ]
     np.random.shuffle(rgb_colors)
     random_color = []
     for i in range(max(mesh_group_new) + 1):

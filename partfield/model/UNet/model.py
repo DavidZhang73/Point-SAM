@@ -23,11 +23,12 @@
 
 import torch.nn as nn
 
-from partfield.model.UNet.buildingblocks import DoubleConv, ResNetBlock, \
-    create_decoders, create_encoders
+from partfield.model.UNet.buildingblocks import ResNetBlock, create_decoders, create_encoders
+
 
 def number_of_features_per_level(init_channel_number, num_levels):
-    return [init_channel_number * 2 ** k for k in range(num_levels)]
+    return [init_channel_number * 2**k for k in range(num_levels)]
+
 
 class AbstractUNet(nn.Module):
     """
@@ -66,31 +67,66 @@ class AbstractUNet(nn.Module):
         is3d (bool): if True the model is 3D, otherwise 2D, default: True
     """
 
-    def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
-                 num_groups=8, num_levels=4, is_segmentation=False, conv_kernel_size=3, pool_kernel_size=2,
-                 conv_padding=1, conv_upscale=2, upsample='default', dropout_prob=0.1, is3d=True, encoder_only=False):
-        super(AbstractUNet, self).__init__()
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        final_sigmoid,
+        basic_module,
+        f_maps=64,
+        layer_order="gcr",
+        num_groups=8,
+        num_levels=4,
+        is_segmentation=False,
+        conv_kernel_size=3,
+        pool_kernel_size=2,
+        conv_padding=1,
+        conv_upscale=2,
+        upsample="default",
+        dropout_prob=0.1,
+        is3d=True,
+        encoder_only=False,
+    ):
+        super().__init__()
 
         if isinstance(f_maps, int):
             f_maps = number_of_features_per_level(f_maps, num_levels=num_levels)
 
         assert isinstance(f_maps, list) or isinstance(f_maps, tuple)
         assert len(f_maps) > 1, "Required at least 2 levels in the U-Net"
-        if 'g' in layer_order:
+        if "g" in layer_order:
             assert num_groups is not None, "num_groups must be specified if GroupNorm is used"
 
         # create encoder path
-        self.encoders = create_encoders(in_channels, f_maps, basic_module, conv_kernel_size,
-                                        conv_padding, conv_upscale, dropout_prob,
-                                        layer_order, num_groups, pool_kernel_size, is3d)
+        self.encoders = create_encoders(
+            in_channels,
+            f_maps,
+            basic_module,
+            conv_kernel_size,
+            conv_padding,
+            conv_upscale,
+            dropout_prob,
+            layer_order,
+            num_groups,
+            pool_kernel_size,
+            is3d,
+        )
 
         self.encoder_only = encoder_only
-        
+
         if encoder_only == False:
             # create decoder path
-            self.decoders = create_decoders(f_maps, basic_module, conv_kernel_size, conv_padding,
-                                            layer_order, num_groups, upsample, dropout_prob,
-                                            is3d)
+            self.decoders = create_decoders(
+                f_maps,
+                basic_module,
+                conv_kernel_size,
+                conv_padding,
+                layer_order,
+                num_groups,
+                upsample,
+                dropout_prob,
+                is3d,
+            )
 
             # in the last layer a 1×1 convolution reduces the number of output channels to the number of labels
             if is3d:
@@ -140,6 +176,7 @@ class AbstractUNet(nn.Module):
             else:
                 return x
 
+
 class ResidualUNet3D(AbstractUNet):
     """
     Residual 3DUnet model implementation based on https://arxiv.org/pdf/1706.00120.pdf.
@@ -148,23 +185,37 @@ class ResidualUNet3D(AbstractUNet):
     Since the model effectively becomes a residual net, in theory it allows for deeper UNet.
     """
 
-    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=(8, 16, 64, 256, 1024), layer_order='gcr',
-                 num_groups=8, num_levels=5, is_segmentation=True, conv_padding=1,
-                 conv_upscale=2, upsample='default', dropout_prob=0.1, encoder_only=False,  **kwargs):
-        super(ResidualUNet3D, self).__init__(in_channels=in_channels,
-                                             out_channels=out_channels,
-                                             final_sigmoid=final_sigmoid,
-                                             basic_module=ResNetBlock,
-                                             f_maps=f_maps,
-                                             layer_order=layer_order,
-                                             num_groups=num_groups,
-                                             num_levels=num_levels,
-                                             is_segmentation=is_segmentation,
-                                             conv_padding=conv_padding,
-                                             conv_upscale=conv_upscale,
-                                             upsample=upsample,
-                                             dropout_prob=dropout_prob,
-                                             encoder_only=encoder_only,
-                                             is3d=True)
-
-
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        final_sigmoid=True,
+        f_maps=(8, 16, 64, 256, 1024),
+        layer_order="gcr",
+        num_groups=8,
+        num_levels=5,
+        is_segmentation=True,
+        conv_padding=1,
+        conv_upscale=2,
+        upsample="default",
+        dropout_prob=0.1,
+        encoder_only=False,
+        **kwargs,
+    ):
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            final_sigmoid=final_sigmoid,
+            basic_module=ResNetBlock,
+            f_maps=f_maps,
+            layer_order=layer_order,
+            num_groups=num_groups,
+            num_levels=num_levels,
+            is_segmentation=is_segmentation,
+            conv_padding=conv_padding,
+            conv_upscale=conv_upscale,
+            upsample=upsample,
+            dropout_prob=dropout_prob,
+            encoder_only=encoder_only,
+            is3d=True,
+        )

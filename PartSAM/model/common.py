@@ -1,13 +1,11 @@
 # https://github.com/baaivision/Uni3D/blob/main/models/point_encoder.py
-from typing import Union
+import random
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torkit3d.nn.functional import batch_index_select
-from torkit3d.ops.sample_farthest_points import sample_farthest_points
 from torkit3d.ops.chamfer_distance import chamfer_distance
-import random
+from torkit3d.ops.sample_farthest_points import sample_farthest_points
 
 
 def fps(points: torch.Tensor, num_samples: int):
@@ -109,9 +107,7 @@ class KNNGrouper(nn.Module):
             nbr_xyz = nbr_xyz / self.radius
 
         nbr_feats = features.reshape(-1, features.shape[-1])[knn_idx_flat]
-        nbr_feats = nbr_feats.reshape(
-            batch_size, self.num_groups, self.group_size, features.shape[-1]
-        )
+        nbr_feats = nbr_feats.reshape(batch_size, self.num_groups, self.group_size, features.shape[-1])
 
         group_feats = [nbr_xyz, nbr_feats]
         if self.centralize_features:
@@ -119,9 +115,7 @@ class KNNGrouper(nn.Module):
             group_feats.append(nbr_feats - center_feats.unsqueeze(2))
 
         group_feats = torch.cat(group_feats, dim=-1)
-        return dict(
-            features=group_feats, centers=centers, knn_idx=knn_idx, fps_idx=fps_idx
-        )
+        return dict(features=group_feats, centers=centers, knn_idx=knn_idx, fps_idx=fps_idx)
 
 
 def group_with_centers_and_knn(
@@ -174,9 +168,7 @@ def group_with_centers_and_knn(
     batch_offset = batch_offset.reshape(-1, 1, 1)
     knn_idx_flat = (knn_idx2 + batch_offset).reshape(-1)  # [B*M*L*K]
     nbr_feats = features.reshape(-1, features.shape[-1])[knn_idx_flat]
-    nbr_feats = nbr_feats.reshape(
-        batch_size2, num_patches, patch_size, features.shape[-1]
-    )
+    nbr_feats = nbr_feats.reshape(batch_size2, num_patches, patch_size, features.shape[-1])
 
     # 3. Concatenate features
     nbr_xyz = torch.repeat_interleave(nbr_xyz, repeats, dim=0)
@@ -212,6 +204,7 @@ class NNGrouper(nn.Module):
         group_feats = torch.cat([nbr_xyz, dist, features], dim=-1)
         return dict(features=group_feats, centers=centers, nn_idx=nn_idx)
 
+
 def group_with_centers_and_nn(
     xyz: torch.Tensor,
     features: torch.Tensor,
@@ -235,6 +228,7 @@ def group_with_centers_and_nn(
     nbr_xyz = nbr_xyz / torch.clamp(dist, min=1e-8)
     group_feats = torch.cat([nbr_xyz, dist, features], dim=-1)
     return group_feats
+
 
 def compute_interp_weights(query: torch.Tensor, key: torch.Tensor, k=3, eps=1e-8):
     """Compute interpolation weights for each query point.
@@ -284,28 +278,29 @@ def repeat_interleave(x: torch.Tensor, repeats: int, dim: int):
     x = x.unsqueeze(dim + 1).expand(shape).flatten(dim, dim + 1)
     return x
 
+
 @torch.no_grad()
 def sample_prompts_adapter(
     points: torch.Tensor,
     gt_masks: torch.Tensor,
-    pred_logits: Union[torch.Tensor, None],
+    pred_logits: torch.Tensor | None,
     threshold: float = None,
-    is_eval = False
+    is_eval=False,
 ):
     """Select prompt sampler based on iou."""
     if pred_logits is None:
         if is_eval:
             return sample_fixed_points(
-                points, gt_masks, pred_logits, threshold, from_error_region=True,return_idx=True
+                points, gt_masks, pred_logits, threshold, from_error_region=True, return_idx=True
             )
         else:
             if random.random() < 0.5:
                 return sample_fixed_points(
-                    points, gt_masks, pred_logits, threshold, from_error_region=True,return_idx=True
+                    points, gt_masks, pred_logits, threshold, from_error_region=True, return_idx=True
                 )
             else:
                 return sample_near_points(
-                    points, gt_masks, pred_logits, threshold, from_error_region=True,return_idx=True
+                    points, gt_masks, pred_logits, threshold, from_error_region=True, return_idx=True
                 )
     else:
         batch_size, num_masks, _ = gt_masks.shape
@@ -320,29 +315,29 @@ def sample_prompts_adapter(
         iou = (gt_masks_copy & pred_masks).sum() / (gt_masks_copy | pred_masks).sum()
         if is_eval:
             return sample_fixed_points(
-                points, gt_masks, pred_logits, threshold, from_error_region=False,return_idx=True
+                points, gt_masks, pred_logits, threshold, from_error_region=False, return_idx=True
             )
         elif iou <= 1.0:
-            if random.random() <= 1.0: 
+            if random.random() <= 1.0:
                 return sample_fixed_points(
-                    points, gt_masks, pred_logits, threshold, from_error_region=False,return_idx=True
+                    points, gt_masks, pred_logits, threshold, from_error_region=False, return_idx=True
                 )
             # elif random.random() < 0.5:
             #     return sample_prompts(points, gt_masks, pred_logits, threshold)
             else:
-                return sample_prompts(points, gt_masks, pred_logits, threshold,num_samples=2)
+                return sample_prompts(points, gt_masks, pred_logits, threshold, num_samples=2)
         else:
             return sample_prompts(points, gt_masks, pred_logits, threshold)
 
 
 @torch.no_grad()
-def sample_prompts( 
+def sample_prompts(
     points: torch.Tensor,
     gt_masks: torch.Tensor,
-    pred_logits: Union[torch.Tensor, None],
+    pred_logits: torch.Tensor | None,
     threshold: float = None,
     num_samples: int = 1,
-    return_idx: bool = False
+    return_idx: bool = False,
 ):
     """Sample prompts from point clouds given ground-truth and predicted masks.
 
@@ -376,8 +371,7 @@ def sample_prompts(
             diff_inds = torch.nonzero(diff_masks[i, j])  # [?, 1]
             if len(diff_inds) == 0:
                 diff_inds = torch.nonzero(gt_masks[i, j])
-            diff_inds = diff_inds.squeeze(1)  
-
+            diff_inds = diff_inds.squeeze(1)
 
             if len(diff_inds) < num_samples:
                 # Not enough indices, repeat existing ones to fill up to num_samples
@@ -388,7 +382,7 @@ def sample_prompts(
             random_indices = random.sample(range(len(diff_inds)), num_samples)
 
             idx = diff_inds[random_indices]
-            
+
             prompt_coords.append(points[i][idx])
             prompt_labels.append(gt_masks[i, j][idx])
             selected_indices.append(idx)
@@ -406,10 +400,10 @@ def sample_prompts(
 def sample_fixed_points(
     points: torch.Tensor,
     gt_masks: torch.Tensor,
-    pred_logits: Union[torch.Tensor, None],
+    pred_logits: torch.Tensor | None,
     threshold: float = None,
     from_error_region: bool = False,
-    return_idx=False
+    return_idx=False,
 ):
     """Sample prompts from point clouds given ground-truth and predicted masks.
 
@@ -442,7 +436,6 @@ def sample_fixed_points(
     prompt_points, prompt_labels, selected_indices = [], [], []
 
     if from_error_region:
-        
         mask = fn | fp
         for i in range(batch_size):
             for j in range(num_masks):
@@ -462,25 +455,19 @@ def sample_fixed_points(
     else:
         for i in range(batch_size):
             for j in range(num_masks):
-                pprompt_coord, pprompt_label, pdist, selected_idx_p = (
-                    sample_furthest_points_from_border(
-                        points[i], fn[i, j], gt_masks[i, j], return_idx=return_idx
-                    )
+                pprompt_coord, pprompt_label, pdist, selected_idx_p = sample_furthest_points_from_border(
+                    points[i], fn[i, j], gt_masks[i, j], return_idx=return_idx
                 )
-                nprompt_coord, nprompt_label, ndist, selected_idx_n = (
-                    sample_furthest_points_from_border(
-                        points[i], fp[i, j], gt_masks[i, j], return_idx=return_idx
-                    )
+                nprompt_coord, nprompt_label, ndist, selected_idx_n = sample_furthest_points_from_border(
+                    points[i], fp[i, j], gt_masks[i, j], return_idx=return_idx
                 )
                 if pdist > ndist:
                     prompt_points.append(pprompt_coord)
                     prompt_labels.append(pprompt_label)
                     selected_indices.append(selected_idx_p)
                 elif ndist == -1:
-                    pprompt_coord, pprompt_label, pdist, selected_idx_p = (
-                        sample_furthest_points_from_border(
-                            points[i], gt_masks[i, j], gt_masks[i, j], return_idx=return_idx
-                        )
+                    pprompt_coord, pprompt_label, pdist, selected_idx_p = sample_furthest_points_from_border(
+                        points[i], gt_masks[i, j], gt_masks[i, j], return_idx=return_idx
                     )
                     prompt_points.append(pprompt_coord)
                     prompt_labels.append(pprompt_label)
@@ -489,21 +476,22 @@ def sample_fixed_points(
                     prompt_points.append(nprompt_coord)
                     prompt_labels.append(nprompt_label)
                     selected_indices.append(selected_idx_n)
-                    
+
     prompt_points = torch.stack(prompt_points)
 
     prompt_labels = torch.stack(prompt_labels)
-    
+
     if return_idx:
         return prompt_points, prompt_labels, selected_indices
     else:
         return prompt_points, prompt_labels
 
+
 @torch.no_grad()
 def sample_fixed_points_ori(
     points: torch.Tensor,
     gt_masks: torch.Tensor,
-    pred_logits: Union[torch.Tensor, None],
+    pred_logits: torch.Tensor | None,
     threshold: float = None,
     from_error_region: bool = False,
 ):
@@ -540,32 +528,24 @@ def sample_fixed_points_ori(
         mask = fn | fp
         for i in range(batch_size):
             for j in range(num_masks):
-                coords, label, _ = sample_furthest_points_from_border_ori(
-                    points[i], mask[i, j], gt_masks[i, j]
-                )
+                coords, label, _ = sample_furthest_points_from_border_ori(points[i], mask[i, j], gt_masks[i, j])
                 prompt_points.append(coords)
                 prompt_labels.append(label)
     else:
         for i in range(batch_size):
             for j in range(num_masks):
-                pprompt_coord, pprompt_label, pdist = (
-                    sample_furthest_points_from_border_ori(
-                        points[i], fn[i, j], gt_masks[i, j]
-                    )
+                pprompt_coord, pprompt_label, pdist = sample_furthest_points_from_border_ori(
+                    points[i], fn[i, j], gt_masks[i, j]
                 )
-                nprompt_coord, nprompt_label, ndist = (
-                    sample_furthest_points_from_border_ori(
-                        points[i], fp[i, j], gt_masks[i, j]
-                    )
+                nprompt_coord, nprompt_label, ndist = sample_furthest_points_from_border_ori(
+                    points[i], fp[i, j], gt_masks[i, j]
                 )
                 if pdist > ndist:
                     prompt_points.append(pprompt_coord)
                     prompt_labels.append(pprompt_label)
                 elif ndist == -1:
-                    pprompt_coord, pprompt_label, pdist = (
-                        sample_furthest_points_from_border_ori(
-                            points[i], gt_masks[i, j], gt_masks[i, j]
-                        )
+                    pprompt_coord, pprompt_label, pdist = sample_furthest_points_from_border_ori(
+                        points[i], gt_masks[i, j], gt_masks[i, j]
                     )
                     prompt_points.append(pprompt_coord)
                     prompt_labels.append(pprompt_label)
@@ -577,9 +557,8 @@ def sample_fixed_points_ori(
     prompt_labels = torch.stack(prompt_labels)
     return prompt_points, prompt_labels
 
-def sample_furthest_points_from_border_ori(
-    coords: torch.Tensor, lables: torch.Tensor, gt: torch.Tensor
-):
+
+def sample_furthest_points_from_border_ori(coords: torch.Tensor, lables: torch.Tensor, gt: torch.Tensor):
     """
     Sample points from the border of the mask.
 
@@ -606,14 +585,15 @@ def sample_furthest_points_from_border_ori(
 
     return center_coords[None, ...], center_label[None, ...], center_dist
 
+
 @torch.no_grad()
 def sample_near_points(
     points: torch.Tensor,
     gt_masks: torch.Tensor,
-    pred_logits: Union[torch.Tensor, None],
+    pred_logits: torch.Tensor | None,
     threshold: float = None,
     from_error_region: bool = False,
-    return_idx=True
+    return_idx=True,
 ):
     """Sample prompts from point clouds given ground-truth and predicted masks.
 
@@ -634,7 +614,7 @@ def sample_near_points(
     fp = torch.zeros_like(fn)
 
     prompt_points, prompt_labels, selected_indices = [], [], []
-        
+
     mask = fn | fp
     for i in range(batch_size):
         for j in range(num_masks):
@@ -651,11 +631,11 @@ def sample_near_points(
                 )
                 prompt_points.append(coords)
                 prompt_labels.append(label)
-                    
+
     prompt_points = torch.stack(prompt_points)
 
     prompt_labels = torch.stack(prompt_labels)
-    
+
     if return_idx:
         return prompt_points, prompt_labels, selected_indices
     else:
@@ -703,16 +683,15 @@ def sample_near_points_from_border(
     else:
         return center_coords[None, ...], center_label[None, ...], center_dist
 
-def sample_PC(
-    coords: torch.Tensor, lables: torch.Tensor, sample_num: int
-):
+
+def sample_PC(coords: torch.Tensor, lables: torch.Tensor, sample_num: int):
     bg_inds = lables == 0
     fg_inds = lables == 1
 
     # All distances from foreground points to background points
     min_dists, _ = chamfer_distance(coords[fg_inds][None, ...], coords[bg_inds][None, ...])
     # Sample randomly from the farthest half of the points from the border
-    k_num =min(len(min_dists.squeeze(0)),sample_num//2)
+    k_num = min(len(min_dists.squeeze(0)), sample_num // 2)
     topk_vals, topk_indices = torch.topk(min_dists.squeeze(0), k_num, largest=False)
     # center_idx = torch.argmax(topk_indices)
     # center_coords = coords[fg_inds][center_idx]
@@ -730,16 +709,14 @@ def sample_PC(
         pad_inds = fg_indices[torch.randint(0, fg_indices.numel(), (pad_size,))]
         sampled_fg_indices = torch.cat([fg_indices, pad_inds], dim=0)
     else:
-        sampled_fg_indices = fg_indices[torch.randperm(fg_indices.numel())[:(sample_num // 2)]]
+        sampled_fg_indices = fg_indices[torch.randperm(fg_indices.numel())[: (sample_num // 2)]]
     center_coords1 = coords[sampled_fg_indices]
     # 合并两个coords并返回
     merged_coords = torch.cat([center_coords1, center_coords2], dim=0)
     return merged_coords
 
 
-def sample_furthest_points_from_border(
-    coords: torch.Tensor, lables: torch.Tensor, gt: torch.Tensor, return_idx=False
-):
+def sample_furthest_points_from_border(coords: torch.Tensor, lables: torch.Tensor, gt: torch.Tensor, return_idx=False):
     """
     Sample points from the border of the mask.
 
@@ -769,7 +746,7 @@ def sample_furthest_points_from_border(
     center_coords = coords[orig_center_idx]
     center_dist = torch.max(min_dists)
     center_label = gt[fg_inds][center_idx]
-    
+
     if return_idx:
         return center_coords[None, ...], center_label[None, ...], center_dist, orig_center_idx
     else:
@@ -806,4 +783,3 @@ class PatchEncoder(nn.Module):
         x = self.conv2(x)  # [B, L, K, C_out]
         y = torch.max(x, dim=-2).values  # [B, L, C_out]
         return y
-    

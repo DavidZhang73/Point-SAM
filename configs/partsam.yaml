@@ -16,7 +16,7 @@ eval_params:
   ckpt_path: ./pretrained/model.safetensors
   fps_point_number: 512
   # Reduce the batch_size when OOM
-  batch_size: 32
+  batch_size: 1
   # Adjust these threshold values to control the segmentation granularity
   iou_threshold: 0.65
   nms_threshold: 0.3
