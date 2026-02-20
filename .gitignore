@@ -8,6 +8,8 @@
 /pretrained
 /results/*
 !/results/.gitkeep
+/data_eval/*
+!/data_eval/.gitkeep
 
 ### VisualStudioCode template
 .vscode/*
